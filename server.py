@@ -696,23 +696,27 @@ if line_handler:
 
 def migrate_db():
     """Add columns that may be missing from older database schemas."""
-    from sqlalchemy import inspect, text
-    inspector = inspect(db.engine)
-    tables = inspector.get_table_names()
+    try:
+        from sqlalchemy import inspect, text
+        inspector = inspect(db.engine)
+        tables = inspector.get_table_names()
 
-    if "videos" in tables:
-        cols = [c["name"] for c in inspector.get_columns("videos")]
-        if "view_count" not in cols:
-            db.session.execute(text("ALTER TABLE videos ADD COLUMN view_count INTEGER DEFAULT 0"))
+        if "videos" in tables:
+            cols = [c["name"] for c in inspector.get_columns("videos")]
+            if "view_count" not in cols:
+                db.session.execute(text("ALTER TABLE videos ADD COLUMN view_count INTEGER DEFAULT 0"))
+                db.session.commit()
+
+        if "client_profiles" in tables:
+            cols = [c["name"] for c in inspector.get_columns("client_profiles")]
+            social_cols = ["social_ig", "social_threads", "social_tiktok", "social_fb", "social_line_voom", "social_youtube"]
+            for col in social_cols:
+                if col not in cols:
+                    db.session.execute(text(f"ALTER TABLE client_profiles ADD COLUMN {col} TEXT DEFAULT ''"))
             db.session.commit()
-
-    if "client_profiles" in tables:
-        cols = [c["name"] for c in inspector.get_columns("client_profiles")]
-        social_cols = ["social_ig", "social_threads", "social_tiktok", "social_fb", "social_line_voom", "social_youtube"]
-        for col in social_cols:
-            if col not in cols:
-                db.session.execute(text(f"ALTER TABLE client_profiles ADD COLUMN {col} TEXT DEFAULT ''"))
-        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[migrate_db] {e}")
 
 
 with app.app_context():
