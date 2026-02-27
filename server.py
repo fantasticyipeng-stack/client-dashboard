@@ -1,0 +1,733 @@
+import os
+import uuid
+from datetime import datetime, date
+
+from flask import Flask, request, jsonify, send_file, abort
+from flask_cors import CORS
+from flask_sqlalchemy import SQLAlchemy
+from dotenv import load_dotenv
+from linebot.v3 import WebhookHandler
+from linebot.v3.exceptions import InvalidSignatureError
+from linebot.v3.messaging import (
+    Configuration, ApiClient, MessagingApi,
+    PushMessageRequest, ReplyMessageRequest, TextMessage,
+)
+from linebot.v3.webhooks import MessageEvent, TextMessageContent, FollowEvent, JoinEvent
+from apscheduler.schedulers.background import BackgroundScheduler
+
+load_dotenv()
+
+# ── Config ──
+
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
+LINE_TARGET_ID = os.getenv("LINE_TARGET_ID", "")
+
+DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.db")
+DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+# ── App ──
+
+app = Flask(__name__)
+app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+CORS(app)
+db = SQLAlchemy(app)
+
+# ── LINE Bot ──
+
+line_handler = None
+line_api = None
+if LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN:
+    line_handler = WebhookHandler(LINE_CHANNEL_SECRET)
+    _cfg = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
+    _api_client = ApiClient(_cfg)
+    line_api = MessagingApi(_api_client)
+
+STATUSES = ['待分配', '剪輯中', '初稿修改中', '客戶確認中', '已完成', '已上傳雲端', '已上傳影片']
+DONE_STATUSES = ['初稿修改中', '客戶確認中', '已完成', '已上傳雲端', '已上傳影片']
+
+DEFAULT_CLIENTS = ['大可為', 'JGB', '婕絲', '台中市政府數位發展局', '吃喝玩樂', '多德仕', '和居', '恩友友', '萬華街區', '橙果創意', '底迪']
+DEFAULT_EDITORS = ['李宥儀', '邱麟晴', '翁薏惠', '陳思妤', '高偉翔', '楊淳惠', '楊斯涵', '王彥鈞', '賴宇柔', '李依珊', '顏佳祐', '賴彥辰', '黃睿妤', '劉恩伶', '鄭樺薇', '胡禎妮', '郭佳柔', '王晨羽']
+
+
+# ── Models ──
+
+class Video(db.Model):
+    __tablename__ = "videos"
+    id = db.Column(db.String(50), primary_key=True)
+    client_name = db.Column(db.String(100), nullable=False)
+    video_id = db.Column(db.String(50), nullable=False)
+    topic = db.Column(db.String(200), nullable=False)
+    draft_date = db.Column(db.String(10), nullable=False)
+    upload_date = db.Column(db.String(10), nullable=False)
+    editor = db.Column(db.String(50), nullable=False)
+    status = db.Column(db.String(20), nullable=False)
+    material_link = db.Column(db.Text, default="")
+    script_link = db.Column(db.Text, default="")
+    view_count = db.Column(db.Integer, default=0)
+    notes = db.Column(db.Text, default="")
+    remarks = db.Column(db.Text, default="")
+    created_at = db.Column(db.String(30), nullable=False)
+    updated_at = db.Column(db.String(30), nullable=False)
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class Client(db.Model):
+    __tablename__ = "clients"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+
+    def to_dict(self):
+        return {"id": self.id, "name": self.name}
+
+
+class Editor(db.Model):
+    __tablename__ = "editors"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+
+    def to_dict(self):
+        return {"id": self.id, "name": self.name}
+
+
+class ClientProfile(db.Model):
+    __tablename__ = "client_profiles"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    current_followers = db.Column(db.Integer, default=0)
+    target_followers = db.Column(db.Integer, default=0)
+    reminders = db.Column(db.Text, default="")
+    social_ig = db.Column(db.Text, default="")
+    social_threads = db.Column(db.Text, default="")
+    social_tiktok = db.Column(db.Text, default="")
+    social_fb = db.Column(db.Text, default="")
+    social_line_voom = db.Column(db.Text, default="")
+    social_youtube = db.Column(db.Text, default="")
+
+    def to_dict(self):
+        return {
+            "current_followers": self.current_followers,
+            "target_followers": self.target_followers,
+            "reminders": self.reminders,
+            "social_ig": self.social_ig or "",
+            "social_threads": self.social_threads or "",
+            "social_tiktok": self.social_tiktok or "",
+            "social_fb": self.social_fb or "",
+            "social_line_voom": self.social_line_voom or "",
+            "social_youtube": self.social_youtube or "",
+        }
+
+
+class EditorProfile(db.Model):
+    __tablename__ = "editor_profiles"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False, unique=True)
+    work_status = db.Column(db.String(20), default="開工")
+    return_date = db.Column(db.String(10), default="")
+    pros = db.Column(db.Text, default="")
+    cons = db.Column(db.Text, default="")
+    suitable_clients = db.Column(db.Text, default="[]")
+    notes = db.Column(db.Text, default="")
+
+    def to_dict(self):
+        import json
+        return {
+            "work_status": self.work_status,
+            "return_date": self.return_date,
+            "pros": self.pros,
+            "cons": self.cons,
+            "suitable_clients": json.loads(self.suitable_clients or "[]"),
+            "notes": self.notes,
+        }
+
+
+class DidiMedia(db.Model):
+    __tablename__ = "didi_media"
+    id = db.Column(db.String(50), primary_key=True)
+    title = db.Column(db.String(200), default="")
+    date = db.Column(db.String(10), default="")
+    platform = db.Column(db.String(20), default="IG")
+    view_count = db.Column(db.Integer, default=0)
+    sponsor_fee = db.Column(db.Float, default=0)
+    remarks = db.Column(db.Text, default="")
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class DidiSpeech(db.Model):
+    __tablename__ = "didi_speech"
+    id = db.Column(db.String(50), primary_key=True)
+    org = db.Column(db.String(200), default="")
+    date = db.Column(db.String(10), default="")
+    location = db.Column(db.String(200), default="")
+    topic = db.Column(db.String(200), default="")
+    photo_url = db.Column(db.Text, default="")
+    feedback = db.Column(db.Text, default="")
+    speaker_fee = db.Column(db.Float, default=0)
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class DidiSoftware(db.Model):
+    __tablename__ = "didi_software"
+    id = db.Column(db.String(50), primary_key=True)
+    client_name = db.Column(db.String(200), default="")
+    monthly_fee = db.Column(db.Float, default=0)
+    months = db.Column(db.Integer, default=0)
+
+    def to_dict(self):
+        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+def seed_defaults():
+    for name in DEFAULT_CLIENTS:
+        if not Client.query.filter_by(name=name).first():
+            db.session.add(Client(name=name))
+    for name in DEFAULT_EDITORS:
+        if not Editor.query.filter_by(name=name).first():
+            db.session.add(Editor(name=name))
+    db.session.commit()
+
+
+# ── API: Serve frontend ──
+
+@app.route("/")
+def index():
+    return send_file("dashboard.html")
+
+
+@app.route("/logo.png")
+def logo():
+    return send_file("logo.png", mimetype="image/png")
+
+
+# ── API: Videos ──
+
+@app.route("/api/videos", methods=["GET"])
+def list_videos():
+    rows = Video.query.order_by(Video.draft_date.asc()).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@app.route("/api/videos", methods=["POST"])
+def create_video():
+    d = request.json
+    now = datetime.now().isoformat()
+    v = Video(
+        id=uuid.uuid4().hex[:16],
+        client_name=d["client_name"],
+        video_id=d["video_id"],
+        topic=d["topic"],
+        draft_date=d["draft_date"],
+        upload_date=d["upload_date"],
+        editor=d["editor"],
+        status=d["status"],
+        material_link=d.get("material_link", ""),
+        script_link=d.get("script_link", ""),
+        view_count=d.get("view_count", 0),
+        notes=d.get("notes", ""),
+        remarks=d.get("remarks", ""),
+        created_at=now,
+        updated_at=now,
+    )
+    db.session.add(v)
+    db.session.commit()
+    return jsonify({"id": v.id, "message": "created"}), 201
+
+
+@app.route("/api/videos/<vid>", methods=["PUT"])
+def update_video(vid):
+    v = Video.query.get(vid)
+    if not v:
+        abort(404)
+    d = request.json
+    for key in ["client_name", "video_id", "topic", "draft_date", "upload_date",
+                 "editor", "status", "material_link", "script_link", "view_count", "notes", "remarks"]:
+        if key in d:
+            setattr(v, key, d[key])
+    v.updated_at = datetime.now().isoformat()
+    db.session.commit()
+    return jsonify({"message": "updated"})
+
+
+@app.route("/api/videos/<vid>", methods=["DELETE"])
+def delete_video(vid):
+    v = Video.query.get(vid)
+    if v:
+        db.session.delete(v)
+        db.session.commit()
+    return jsonify({"message": "deleted"})
+
+
+# ── API: Clients ──
+
+@app.route("/api/clients", methods=["GET"])
+def list_clients():
+    rows = Client.query.order_by(Client.id).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@app.route("/api/clients", methods=["POST"])
+def add_client():
+    name = request.json.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "名稱不可為空"}), 400
+    if Client.query.filter_by(name=name).first():
+        return jsonify({"error": "此客戶已存在"}), 409
+    db.session.add(Client(name=name))
+    db.session.commit()
+    return jsonify({"message": "added"}), 201
+
+
+@app.route("/api/clients/<int:cid>", methods=["DELETE"])
+def delete_client(cid):
+    c = Client.query.get(cid)
+    if c:
+        db.session.delete(c)
+        db.session.commit()
+    return jsonify({"message": "deleted"})
+
+
+# ── API: Editors ──
+
+@app.route("/api/editors", methods=["GET"])
+def list_editors():
+    rows = Editor.query.order_by(Editor.id).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@app.route("/api/editors", methods=["POST"])
+def add_editor():
+    name = request.json.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "名稱不可為空"}), 400
+    if Editor.query.filter_by(name=name).first():
+        return jsonify({"error": "此人員已存在"}), 409
+    db.session.add(Editor(name=name))
+    db.session.commit()
+    return jsonify({"message": "added"}), 201
+
+
+@app.route("/api/editors/<int:eid>", methods=["DELETE"])
+def delete_editor(eid):
+    e = Editor.query.get(eid)
+    if e:
+        db.session.delete(e)
+        db.session.commit()
+    return jsonify({"message": "deleted"})
+
+
+# ── API: Client Profiles ──
+
+@app.route("/api/client-profiles", methods=["GET"])
+def get_client_profiles():
+    rows = ClientProfile.query.all()
+    return jsonify({r.name: r.to_dict() for r in rows})
+
+
+@app.route("/api/client-profiles", methods=["POST"])
+def save_client_profile():
+    d = request.json
+    name = d.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "名稱不可為空"}), 400
+    row = ClientProfile.query.filter_by(name=name).first()
+    if not row:
+        row = ClientProfile(name=name)
+        db.session.add(row)
+    row.current_followers = d.get("current_followers", 0)
+    row.target_followers = d.get("target_followers", 0)
+    row.reminders = d.get("reminders", "")
+    row.social_ig = d.get("social_ig", "")
+    row.social_threads = d.get("social_threads", "")
+    row.social_tiktok = d.get("social_tiktok", "")
+    row.social_fb = d.get("social_fb", "")
+    row.social_line_voom = d.get("social_line_voom", "")
+    row.social_youtube = d.get("social_youtube", "")
+    db.session.commit()
+    return jsonify({"message": "saved"})
+
+
+# ── API: Editor Profiles ──
+
+@app.route("/api/editor-profiles", methods=["GET"])
+def get_editor_profiles():
+    rows = EditorProfile.query.all()
+    return jsonify({r.name: r.to_dict() for r in rows})
+
+
+@app.route("/api/editor-profiles", methods=["POST"])
+def save_editor_profile():
+    import json as _json
+    d = request.json
+    name = d.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "名稱不可為空"}), 400
+    row = EditorProfile.query.filter_by(name=name).first()
+    if not row:
+        row = EditorProfile(name=name)
+        db.session.add(row)
+    row.work_status = d.get("work_status", "開工")
+    row.return_date = d.get("return_date", "")
+    row.pros = d.get("pros", "")
+    row.cons = d.get("cons", "")
+    row.suitable_clients = _json.dumps(d.get("suitable_clients", []), ensure_ascii=False)
+    row.notes = d.get("notes", "")
+    db.session.commit()
+    return jsonify({"message": "saved"})
+
+
+# ── API: Didi Media ──
+
+@app.route("/api/didi-media", methods=["GET"])
+def list_didi_media():
+    rows = DidiMedia.query.order_by(DidiMedia.date.desc()).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@app.route("/api/didi-media", methods=["POST"])
+def save_didi_media():
+    items = request.json
+    if not isinstance(items, list):
+        return jsonify({"error": "expected array"}), 400
+    DidiMedia.query.delete()
+    for d in items:
+        db.session.add(DidiMedia(
+            id=d.get("id", uuid.uuid4().hex[:16]),
+            title=d.get("title", ""),
+            date=d.get("date", ""),
+            platform=d.get("platform", "IG"),
+            view_count=d.get("view_count", 0),
+            sponsor_fee=d.get("sponsor_fee", 0),
+            remarks=d.get("remarks", ""),
+        ))
+    db.session.commit()
+    return jsonify({"message": "saved"})
+
+
+# ── API: Didi Speech ──
+
+@app.route("/api/didi-speech", methods=["GET"])
+def list_didi_speech():
+    rows = DidiSpeech.query.order_by(DidiSpeech.date.desc()).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@app.route("/api/didi-speech", methods=["POST"])
+def save_didi_speech():
+    items = request.json
+    if not isinstance(items, list):
+        return jsonify({"error": "expected array"}), 400
+    DidiSpeech.query.delete()
+    for d in items:
+        db.session.add(DidiSpeech(
+            id=d.get("id", uuid.uuid4().hex[:16]),
+            org=d.get("org", ""),
+            date=d.get("date", ""),
+            location=d.get("location", ""),
+            topic=d.get("topic", ""),
+            photo_url=d.get("photo_url", ""),
+            feedback=d.get("feedback", ""),
+            speaker_fee=d.get("speaker_fee", 0),
+        ))
+    db.session.commit()
+    return jsonify({"message": "saved"})
+
+
+# ── API: Didi Software ──
+
+@app.route("/api/didi-software", methods=["GET"])
+def list_didi_software():
+    rows = DidiSoftware.query.order_by(DidiSoftware.id).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@app.route("/api/didi-software", methods=["POST"])
+def save_didi_software():
+    items = request.json
+    if not isinstance(items, list):
+        return jsonify({"error": "expected array"}), 400
+    DidiSoftware.query.delete()
+    for d in items:
+        db.session.add(DidiSoftware(
+            id=d.get("id", uuid.uuid4().hex[:16]),
+            client_name=d.get("client_name", ""),
+            monthly_fee=d.get("monthly_fee", 0),
+            months=d.get("months", 0),
+        ))
+    db.session.commit()
+    return jsonify({"message": "saved"})
+
+
+# ── Overdue logic ──
+
+def get_overdue_items():
+    today = date.today().isoformat()
+    return Video.query.filter(
+        Video.status.notin_(DONE_STATUSES),
+        Video.draft_date < today
+    ).order_by(Video.draft_date.asc()).all()
+
+
+def build_overdue_message(items):
+    if not items:
+        return None
+    today = date.today()
+    msg = f"⚠️ 短影片初稿逾期提醒（{len(items)} 筆）\n{'─' * 20}\n\n"
+    for i, d in enumerate(items, 1):
+        draft = datetime.strptime(d.draft_date, "%Y-%m-%d").date()
+        overdue_days = (today - draft).days
+        msg += f"{i}. {d.client_name}｜{d.video_id}\n"
+        msg += f"   主題：{d.topic}\n"
+        msg += f"   剪輯：{d.editor}\n"
+        msg += f"   初稿日：{d.draft_date}（已逾期 {overdue_days} 天）\n"
+        msg += f"   狀態：{d.status}\n\n"
+    msg += "請盡速處理！\n回覆「指令」查看可用操作。"
+    return msg
+
+
+def send_line_push(message, target_id=None):
+    if not line_api:
+        return False
+    tid = target_id or LINE_TARGET_ID
+    if not tid:
+        return False
+    try:
+        line_api.push_message(PushMessageRequest(
+            to=tid, messages=[TextMessage(text=message)]
+        ))
+        return True
+    except Exception as e:
+        print(f"[LINE push error] {e}")
+        return False
+
+
+def scheduled_overdue_check():
+    with app.app_context():
+        items = get_overdue_items()
+        msg = build_overdue_message(items)
+        if msg:
+            ok = send_line_push(msg)
+            print(f"[Scheduler] Sent overdue alert: {len(items)} items, success={ok}")
+        else:
+            print("[Scheduler] No overdue items.")
+
+
+@app.route("/api/check-overdue", methods=["POST"])
+def api_check_overdue():
+    items = get_overdue_items()
+    msg = build_overdue_message(items)
+    if not msg:
+        return jsonify({"message": "沒有逾期任務", "count": 0, "sent": False})
+    ok = send_line_push(msg)
+    return jsonify({
+        "message": f"已發送 {len(items)} 筆逾期提醒" if ok else "LINE 未設定或傳送失敗",
+        "count": len(items),
+        "sent": ok,
+    })
+
+
+# ── LINE Webhook ──
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    if not line_handler:
+        abort(500, "LINE not configured")
+    signature = request.headers.get("X-Line-Signature", "")
+    body = request.get_data(as_text=True)
+    try:
+        line_handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return "OK"
+
+
+def reply_line(reply_token, text):
+    try:
+        line_api.reply_message(ReplyMessageRequest(
+            reply_token=reply_token,
+            messages=[TextMessage(text=text)]
+        ))
+    except Exception as e:
+        print(f"[LINE reply error] {e}")
+
+
+def handle_line_command(reply_token, text):
+    text = text.strip()
+    cmd = text.split()
+
+    if text in ("指令", "help", "選單", "幫助"):
+        reply_line(reply_token, (
+            "📋 可用指令：\n\n"
+            "【列表】查看所有進行中任務\n"
+            "【逾期】查看逾期任務\n"
+            "【查詢 影片編號】查看特定任務\n"
+            "【改狀態 影片編號 新狀態】\n"
+            "  狀態：待分配／剪輯中／初稿修改中／客戶確認中／已完成／已上傳雲端／已上傳影片\n"
+            "【改備註 影片編號 內容】\n"
+            "【客戶列表】\n"
+            "【人員列表】\n"
+            "【加客戶 名稱】\n"
+            "【加人員 名稱】"
+        ))
+
+    elif text == "列表":
+        rows = Video.query.filter(
+            Video.status.notin_(['已完成', '已上傳雲端', '已上傳影片'])
+        ).order_by(Video.draft_date.asc()).all()
+        if not rows:
+            reply_line(reply_token, "目前沒有進行中的任務 👍")
+        else:
+            msg = f"📋 進行中任務（{len(rows)} 筆）\n{'─' * 18}\n\n"
+            for i, r in enumerate(rows, 1):
+                msg += f"{i}. {r.client_name}｜{r.video_id}\n   {r.topic}｜{r.editor}｜{r.status}\n   初稿：{r.draft_date}\n\n"
+            reply_line(reply_token, msg)
+
+    elif text == "逾期":
+        items = get_overdue_items()
+        if not items:
+            reply_line(reply_token, "目前沒有逾期任務 👍")
+        else:
+            reply_line(reply_token, build_overdue_message(items))
+
+    elif len(cmd) >= 2 and cmd[0] == "查詢":
+        vid = cmd[1]
+        r = Video.query.filter_by(video_id=vid).first()
+        if not r:
+            reply_line(reply_token, f"找不到編號「{vid}」的影片。")
+        else:
+            reply_line(reply_token, (
+                f"📎 {r.client_name}｜{r.video_id}\n"
+                f"主題：{r.topic}\n"
+                f"狀態：{r.status}\n"
+                f"剪輯：{r.editor}\n"
+                f"初稿日：{r.draft_date}\n"
+                f"上片日：{r.upload_date}\n"
+                f"素材：{r.material_link or '無'}\n"
+                f"腳本：{r.script_link or '無'}\n"
+                f"注意：{r.notes or '無'}\n"
+                f"備註：{r.remarks or '無'}"
+            ))
+
+    elif len(cmd) >= 3 and cmd[0] == "改狀態":
+        vid, new_status = cmd[1], cmd[2]
+        if new_status not in STATUSES:
+            reply_line(reply_token, f"無效狀態。可用：{'／'.join(STATUSES)}")
+        else:
+            r = Video.query.filter_by(video_id=vid).first()
+            if not r:
+                reply_line(reply_token, f"找不到編號「{vid}」的影片。")
+            else:
+                r.status = new_status
+                r.updated_at = datetime.now().isoformat()
+                db.session.commit()
+                reply_line(reply_token, f"✅ 已將「{vid}」狀態改為「{new_status}」")
+
+    elif len(cmd) >= 3 and cmd[0] == "改備註":
+        vid = cmd[1]
+        new_remark = " ".join(cmd[2:])
+        r = Video.query.filter_by(video_id=vid).first()
+        if not r:
+            reply_line(reply_token, f"找不到編號「{vid}」的影片。")
+        else:
+            r.remarks = new_remark
+            r.updated_at = datetime.now().isoformat()
+            db.session.commit()
+            reply_line(reply_token, f"✅ 已更新「{vid}」的備註為：{new_remark}")
+
+    elif text == "客戶列表":
+        names = [c.name for c in Client.query.order_by(Client.id).all()]
+        reply_line(reply_token, "📂 客戶列表：\n" + "\n".join(f"  • {n}" for n in names) if names else "目前沒有客戶。")
+
+    elif text == "人員列表":
+        names = [e.name for e in Editor.query.order_by(Editor.id).all()]
+        reply_line(reply_token, "👥 人員列表：\n" + "\n".join(f"  • {n}" for n in names) if names else "目前沒有人員。")
+
+    elif len(cmd) >= 2 and cmd[0] == "加客戶":
+        name = " ".join(cmd[1:])
+        if Client.query.filter_by(name=name).first():
+            reply_line(reply_token, f"客戶「{name}」已存在。")
+        else:
+            db.session.add(Client(name=name))
+            db.session.commit()
+            reply_line(reply_token, f"✅ 已新增客戶「{name}」")
+
+    elif len(cmd) >= 2 and cmd[0] == "加人員":
+        name = " ".join(cmd[1:])
+        if Editor.query.filter_by(name=name).first():
+            reply_line(reply_token, f"人員「{name}」已存在。")
+        else:
+            db.session.add(Editor(name=name))
+            db.session.commit()
+            reply_line(reply_token, f"✅ 已新增人員「{name}」")
+
+    else:
+        reply_line(reply_token, "我不太理解這個指令 😅\n回覆「指令」查看所有可用操作。")
+
+
+if line_handler:
+    @line_handler.add(MessageEvent, message=TextMessageContent)
+    def on_message(event):
+        handle_line_command(event.reply_token, event.message.text)
+
+    @line_handler.add(FollowEvent)
+    def on_follow(event):
+        uid = event.source.user_id
+        print(f"[LINE] User followed: {uid}")
+        reply_line(event.reply_token,
+                   f"歡迎使用短影片管理機器人！👋\n\n你的 User ID：\n{uid}\n\n回覆「指令」查看所有操作。")
+
+    @line_handler.add(JoinEvent)
+    def on_join(event):
+        gid = getattr(event.source, "group_id", "unknown")
+        print(f"[LINE] Joined group: {gid}")
+        reply_line(event.reply_token,
+                   f"已加入群組！📋\n\n群組 ID：\n{gid}\n\n請將此 ID 設為 LINE_TARGET_ID。\n回覆「指令」查看所有操作。")
+
+
+# ── Startup ──
+
+def migrate_db():
+    """Add columns that may be missing from older database schemas."""
+    from sqlalchemy import inspect, text
+    inspector = inspect(db.engine)
+    tables = inspector.get_table_names()
+
+    if "videos" in tables:
+        cols = [c["name"] for c in inspector.get_columns("videos")]
+        if "view_count" not in cols:
+            db.session.execute(text("ALTER TABLE videos ADD COLUMN view_count INTEGER DEFAULT 0"))
+            db.session.commit()
+
+    if "client_profiles" in tables:
+        cols = [c["name"] for c in inspector.get_columns("client_profiles")]
+        social_cols = ["social_ig", "social_threads", "social_tiktok", "social_fb", "social_line_voom", "social_youtube"]
+        for col in social_cols:
+            if col not in cols:
+                db.session.execute(text(f"ALTER TABLE client_profiles ADD COLUMN {col} TEXT DEFAULT ''"))
+        db.session.commit()
+
+
+with app.app_context():
+    db.create_all()
+    migrate_db()
+    seed_defaults()
+
+if __name__ == "__main__":
+    scheduler = BackgroundScheduler()
+    check_hour = int(os.getenv("CHECK_HOUR", "9"))
+    check_minute = int(os.getenv("CHECK_MINUTE", "0"))
+    scheduler.add_job(scheduled_overdue_check, "cron", hour=check_hour, minute=check_minute)
+    scheduler.start()
+    print(f"[Scheduler] Daily overdue check at {check_hour:02d}:{check_minute:02d}")
+
+    port = int(os.getenv("PORT", "5000"))
+    print(f"Dashboard running at http://localhost:{port}")
+    app.run(host="0.0.0.0", port=port, debug=False)

@@ -1,0 +1,28 @@
+databases:
+  - name: video-dashboard-db
+    plan: free
+    databaseName: dashboard
+    user: dashboard_user
+
+services:
+  - type: web
+    name: video-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn server:app
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: video-dashboard-db
+          property: connectionString
+      - key: LINE_CHANNEL_SECRET
+        sync: false
+      - key: LINE_CHANNEL_ACCESS_TOKEN
+        sync: false
+      - key: LINE_TARGET_ID
+        sync: false
+      - key: CHECK_HOUR
+        value: "9"
+      - key: CHECK_MINUTE
+        value: "0"

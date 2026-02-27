@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>小跟拍戰情版</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f0f2f5; --card: #fff; --primary: #4f46e5; --primary-hover: #4338ca;
+  --text: #1e293b; --text2: #64748b; --border: #e2e8f0;
+  --success: #10b981; --warning: #f59e0b; --danger: #ef4444; --info: #3b82f6;
+  --sidebar-bg: #1e1b4b; --sidebar-hover: #312e81; --sidebar-active: #4f46e5;
+  --radius: 12px;
+  --shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.04);
+  --shadow-lg: 0 4px 24px rgba(0,0,0,.12);
+  --sidebar-w: 220px;
+}
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; display: flex; }
+
+.sidebar { width: var(--sidebar-w); background: var(--sidebar-bg); color: #c7d2fe; position: fixed; top: 0; left: 0; bottom: 0; padding: 24px 0; z-index: 100; display: flex; flex-direction: column; }
+.sidebar-title { padding: 0 12px 16px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 8px; cursor: pointer; display: block; text-decoration: none; }
+.sidebar-title img { width: 100%; max-width: 180px; height: auto; display: block; }
+.sidebar-nav { list-style: none; flex: 1; }
+.sidebar-nav li { margin: 2px 8px; }
+.sidebar-nav a { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 8px; color: #c7d2fe; text-decoration: none; font-size: 14px; font-weight: 500; transition: all .15s; cursor: pointer; }
+.sidebar-nav a:hover { background: var(--sidebar-hover); color: #fff; }
+.sidebar-nav a.active { background: var(--sidebar-active); color: #fff; font-weight: 600; }
+.sidebar-nav .nav-icon { font-size: 18px; width: 24px; text-align: center; }
+
+.main-content { margin-left: var(--sidebar-w); flex: 1; min-height: 100vh; }
+
+.header { background: linear-gradient(135deg, var(--primary), #7c3aed); color: #fff; padding: 18px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+.header h1 { font-size: 19px; font-weight: 700; }
+.header-right { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.revenue-bar { background: var(--card); margin: 16px 24px 0; border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.rev-block { text-align: center; }
+.rev-block .rev-label { font-size: 11px; color: var(--text2); margin-bottom: 2px; }
+.rev-block .rev-value { font-size: 20px; font-weight: 700; }
+.rev-progress-wrap { flex: 1; min-width: 180px; }
+.rev-progress-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--text2); margin-bottom: 5px; }
+.rev-progress-outer { position: relative; }
+.rev-progress-bar { height: 14px; background: #e2e8f0; border-radius: 7px; overflow: hidden; }
+.rev-progress-fill { height: 100%; border-radius: 7px; background: linear-gradient(90deg, var(--primary), #7c3aed); transition: width .5s ease; }
+.rev-checkpoints { position: relative; height: 16px; margin-top: 2px; }
+.rev-cp { position: absolute; transform: translateX(-50%); font-size: 9px; font-weight: 500; color: #cbd5e1; transition: color .3s; }
+.rev-cp.reached { color: var(--primary); font-weight: 700; }
+.rev-pct { font-size: 20px; font-weight: 700; color: var(--primary); min-width: 55px; text-align: center; }
+
+.btn { display: inline-flex; align-items: center; gap: 5px; padding: 8px 16px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .2s; }
+.btn-white { background: #fff; color: var(--primary); }
+.btn-white:hover { background: #f1f0ff; }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: var(--primary-hover); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: #dc2626; }
+.btn-outline { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+.btn-outline:hover { background: var(--bg); }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-icon { padding: 7px 10px; font-size: 16px; line-height: 1; }
+.btn-success { background: var(--success); color: #fff; }
+
+.page { display: none; }
+.page.active { display: block; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; padding: 16px 24px; }
+.stat-card { background: var(--card); border-radius: var(--radius); padding: 14px 18px; box-shadow: var(--shadow); }
+.stat-card .label { font-size: 12px; color: var(--text2); margin-bottom: 2px; }
+.stat-card .value { font-size: 24px; font-weight: 700; }
+.stat-card .value.blue { color: var(--info); }
+.stat-card .value.yellow { color: var(--warning); }
+.stat-card .value.green { color: var(--success); }
+.stat-card .value.red { color: var(--danger); }
+
+.toolbar { display: flex; gap: 8px; padding: 0 24px 12px; flex-wrap: wrap; align-items: center; }
+.search-box { flex: 0 1 240px; min-width: 120px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--card); outline: none; }
+.search-box:focus { border-color: var(--primary); }
+
+.ms-wrap { position: relative; }
+.ms-btn { padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; background: var(--card); cursor: pointer; white-space: nowrap; display: flex; align-items: center; gap: 4px; user-select: none; }
+.ms-btn:hover { border-color: var(--primary); }
+.ms-btn .ms-count { background: var(--primary); color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 10px; }
+.ms-drop { display: none; position: absolute; top: 100%; left: 0; margin-top: 4px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow-lg); z-index: 500; min-width: 180px; max-height: 260px; overflow-y: auto; padding: 6px 0; }
+.ms-drop.open { display: block; }
+.ms-drop label { display: flex; align-items: center; gap: 8px; padding: 6px 14px; font-size: 13px; cursor: pointer; }
+.ms-drop label:hover { background: var(--bg); }
+.ms-drop input[type="checkbox"] { width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); }
+.ms-drop .ms-all { border-bottom: 1px solid var(--border); margin-bottom: 4px; padding-bottom: 8px; font-weight: 600; color: var(--primary); }
+
+.table-wrapper { padding: 0 24px 24px; }
+.table-container { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 800px; }
+thead th { text-align: left; padding: 8px 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; color: var(--text2); background: #f8fafc; border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer; user-select: none; }
+thead th:hover { color: var(--primary); }
+thead th.sorted-asc::after { content: " ▲"; font-size: 9px; }
+thead th.sorted-desc::after { content: " ▼"; font-size: 9px; }
+tbody td { padding: 7px 6px; border-bottom: 1px solid var(--border); font-size: 13px; vertical-align: top; }
+tbody tr:hover { background: #f8fafc; }
+tbody tr:last-child td { border-bottom: none; }
+
+.status-badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
+.status-待分配 { background: #fef3c7; color: #92400e; }
+.status-剪輯中 { background: #dbeafe; color: #1e40af; }
+.status-初稿修改中 { background: #ffedd5; color: #9a3412; }
+.status-客戶確認中 { background: #ede9fe; color: #5b21b6; }
+.status-已完成 { background: #d1fae5; color: #065f46; }
+.status-已上傳雲端 { background: #cffafe; color: #155e75; }
+.status-已上傳影片 { background: #f0fdf4; color: #14532d; }
+.overdue-tag { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--danger); color: #fff; margin-right: 6px; }
+.note-cell { max-width: 130px; }
+.note-cell span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.actions { display: flex; gap: 4px; white-space: nowrap; }
+.empty-state { text-align: center; padding: 50px 20px; color: var(--text2); }
+.empty-state .icon { font-size: 40px; margin-bottom: 8px; }
+
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1000; justify-content: center; align-items: flex-start; padding: 28px 14px; overflow-y: auto; }
+.modal-overlay.active { display: flex; }
+.modal { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-lg); width: 100%; max-width: 620px; animation: slideUp .25s ease; }
+@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+.modal-header { display: flex; justify-content: space-between; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.modal-header h2 { font-size: 15px; font-weight: 700; }
+.modal-close { width: 28px; height: 28px; border: none; background: var(--bg); border-radius: 6px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text2); }
+.modal-close:hover { background: #e2e8f0; }
+.modal-body { padding: 16px 20px; }
+.modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+
+.form-group { margin-bottom: 12px; }
+.form-group label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.form-group label .required { color: var(--danger); margin-left: 2px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.input-with-add { display: flex; gap: 6px; }
+.input-with-add select, .input-with-add input { flex: 1; }
+
+input[type="text"], input[type="url"], input[type="date"], input[type="number"], select, textarea {
+  width: 100%; padding: 8px 11px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; font-family: inherit; outline: none; transition: border .2s; background: #fff;
+}
+input:focus, select:focus, textarea:focus { border-color: var(--primary); }
+textarea { resize: vertical; min-height: 50px; }
+
+.confirm-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 1100; justify-content: center; align-items: center; }
+.confirm-overlay.active { display: flex; }
+.confirm-box { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 24px; text-align: center; max-width: 360px; width: 90%; animation: slideUp .2s ease; }
+.confirm-box p { margin-bottom: 16px; font-size: 14px; }
+.confirm-actions { display: flex; gap: 8px; justify-content: center; }
+
+.detail-grid { display: grid; grid-template-columns: 100px 1fr; gap: 8px 12px; font-size: 13px; }
+.detail-label { font-weight: 600; color: var(--text2); }
+.detail-value { word-break: break-word; }
+.detail-value a { color: var(--primary); text-decoration: none; }
+.detail-value a:hover { text-decoration: underline; }
+
+.toast-container { position: fixed; top: 18px; right: 18px; z-index: 2000; display: flex; flex-direction: column; gap: 6px; }
+.toast { background: var(--card); padding: 11px 16px; border-radius: 8px; box-shadow: var(--shadow-lg); font-size: 13px; animation: slideIn .3s ease; border-left: 4px solid var(--success); }
+.toast.error { border-left-color: var(--danger); }
+@keyframes slideIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+
+.profile-grid { padding: 16px 32px 32px; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
+.profile-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; overflow: hidden; }
+.profile-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.profile-field { margin-bottom: 12px; }
+.profile-field label { display: block; font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
+.profile-field input, .profile-field select, .profile-field textarea { font-size: 13px; padding: 7px 10px; }
+.profile-field textarea { min-height: 44px; }
+.profile-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mini-table-wrap { overflow-x: auto; margin-top: 6px; }
+.profile-mini-table { width: 100%; font-size: 12px; border-collapse: collapse; table-layout: auto; min-width: 0; }
+.profile-mini-table th { text-align: left; padding: 5px 6px; background: #f8fafc; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text2); white-space: nowrap; }
+.profile-mini-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); word-break: break-word; max-width: 120px; }
+.profile-mini-table td:last-child { white-space: nowrap; }
+.profile-mini-table input { padding: 4px 6px; font-size: 12px; width: 70px; }
+
+.work-status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+.ws-開工 { background: #d1fae5; color: #065f46; }
+.ws-暫時休息 { background: #fef3c7; color: #92400e; }
+.ws-暫停 { background: #fee2e2; color: #991b1b; }
+
+.cb-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.cb-grid label { display: flex; align-items: center; gap: 4px; font-size: 12px; padding: 3px 8px; background: var(--bg); border-radius: 6px; cursor: pointer; }
+.cb-grid input { width: 14px; height: 14px; accent-color: var(--primary); }
+
+.page-title { font-size: 18px; font-weight: 700; padding: 20px 32px 8px; }
+
+/* Didi section blocks */
+.didi-section { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin: 16px 32px; padding: 20px 24px; }
+.didi-section h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.didi-table-wrap { overflow-x: auto; }
+.didi-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 500px; }
+.didi-table th { text-align: left; padding: 8px 8px; background: #f8fafc; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text2); white-space: nowrap; }
+.didi-table td { padding: 7px 8px; border-bottom: 1px solid var(--border); }
+.didi-table input, .didi-table select, .didi-table textarea { font-size: 12px; padding: 5px 7px; }
+.didi-table textarea { min-height: 32px; resize: vertical; }
+.didi-subtotal { margin-top: 10px; text-align: right; font-size: 14px; font-weight: 700; color: var(--primary); }
+
+@media (max-width: 900px) {
+  .sidebar { width: 56px; }
+  .sidebar-title { display: none; }
+  .sidebar-nav span { display: none; }
+  .sidebar-nav a { justify-content: center; padding: 12px; }
+  .main-content { margin-left: 56px; }
+  .header, .stats, .toolbar, .table-wrapper, .revenue-bar, .profile-grid, .page-title, .didi-section { padding-left: 14px; padding-right: 14px; margin-left: 0; margin-right: 0; }
+  .revenue-bar { margin: 10px 14px 0; }
+  .form-row, .profile-row { grid-template-columns: 1fr; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+  .profile-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <a class="sidebar-title" onclick="switchPage('videos',document.querySelector('.sidebar-nav a'))"><img src="logo.png" alt="小跟拍"></a>
+  <ul class="sidebar-nav">
+    <li><a class="active" onclick="switchPage('videos',this)"><span class="nav-icon">&#9776;</span><span>影片管理</span></a></li>
+    <li><a onclick="switchPage('clients',this)"><span class="nav-icon">&#9733;</span><span>客戶資料與目標</span></a></li>
+    <li><a onclick="switchPage('didi',this)"><span class="nav-icon">&#9830;</span><span>底迪帳號</span></a></li>
+    <li><a onclick="switchPage('editors',this)"><span class="nav-icon">&#9998;</span><span>剪輯人員管理</span></a></li>
+  </ul>
+</aside>
+
+<div class="main-content">
+
+<header class="header">
+  <h1>小跟拍戰情版</h1>
+  <div class="header-right">
+    <button class="btn btn-white" onclick="triggerOverdueCheck()">LINE 逾期提醒</button>
+    <button class="btn btn-white" onclick="exportCSV()">匯出 CSV</button>
+    <button class="btn btn-white" onclick="openModal()">＋ 新增影片任務</button>
+  </div>
+</header>
+
+<section class="revenue-bar" id="revenueBar"></section>
+
+<!-- PAGE 1: Videos -->
+<div id="page-videos" class="page active">
+  <section class="stats" id="stats"></section>
+  <section class="toolbar">
+    <input type="text" class="search-box" id="searchInput" placeholder="搜尋客戶、編號、主題、剪輯人員..." oninput="renderTable()">
+    <div class="ms-wrap" id="msStatus"><div class="ms-btn" onclick="toggleDrop('msStatus')">狀態 <span class="ms-count" id="msStatusCount" style="display:none"></span> ▾</div><div class="ms-drop" id="msStatusDrop"></div></div>
+    <div class="ms-wrap" id="msEditor"><div class="ms-btn" onclick="toggleDrop('msEditor')">人員 <span class="ms-count" id="msEditorCount" style="display:none"></span> ▾</div><div class="ms-drop" id="msEditorDrop"></div></div>
+    <div class="ms-wrap" id="msClient"><div class="ms-btn" onclick="toggleDrop('msClient')">客戶 <span class="ms-count" id="msClientCount" style="display:none"></span> ▾</div><div class="ms-drop" id="msClientDrop"></div></div>
+  </section>
+  <section class="table-wrapper">
+    <div class="table-container">
+      <table>
+        <thead><tr>
+          <th data-key="client_name" onclick="sortBy('client_name')">客戶名稱</th>
+          <th data-key="video_id" onclick="sortBy('video_id')">影片編號</th>
+          <th data-key="topic" onclick="sortBy('topic')">影片主題</th>
+          <th data-key="status" onclick="sortBy('status')">狀態</th>
+          <th data-key="draft_date" onclick="sortBy('draft_date')">初稿繳交</th>
+          <th data-key="upload_date" onclick="sortBy('upload_date')">預計上片</th>
+          <th data-key="editor" onclick="sortBy('editor')">剪輯人員</th>
+          <th>注意事項</th>
+          <th>操作</th>
+        </tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<!-- PAGE 2: Client Profiles -->
+<div id="page-clients" class="page">
+  <div class="page-title" style="display:flex;justify-content:space-between;align-items:center;padding-right:32px">客戶資料與目標 <button class="btn btn-primary btn-sm" onclick="addClientFromProfile()">＋ 新增客戶</button></div>
+  <div class="profile-grid" id="clientProfileGrid"></div>
+</div>
+
+<!-- PAGE 3: Didi Revenue -->
+<div id="page-didi" class="page">
+  <div class="page-title">底迪帳號</div>
+  <div class="didi-section" id="didiMediaSection"></div>
+  <div class="didi-section" id="didiSpeechSection"></div>
+  <div class="didi-section" id="didiSoftwareSection"></div>
+  <div style="height:32px"></div>
+</div>
+
+<!-- PAGE 4: Editor Profiles -->
+<div id="page-editors" class="page">
+  <div class="page-title" style="display:flex;justify-content:space-between;align-items:center;padding-right:32px">剪輯人員管理 <button class="btn btn-primary btn-sm" onclick="addEditorFromProfile()">＋ 新增人員</button></div>
+  <div class="profile-grid" id="editorProfileGrid"></div>
+</div>
+
+<!-- Form Modal -->
+<div class="modal-overlay" id="formModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">新增影片任務</h2>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <form id="videoForm" onsubmit="handleSubmit(event)">
+        <input type="hidden" id="editId">
+        <div class="form-row">
+          <div class="form-group">
+            <label>客戶名稱 <span class="required">*</span></label>
+            <div class="input-with-add">
+              <select id="clientName" required><option value="">請選擇</option></select>
+              <button type="button" class="btn btn-outline btn-icon" onclick="quickAddClient()" title="新增客戶">+</button>
+              <button type="button" class="btn btn-outline btn-icon" onclick="quickDelClient()" title="刪除客戶" style="color:var(--danger)">−</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>影片編號 <span class="required">*</span></label>
+            <input type="text" id="videoId" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>影片主題 <span class="required">*</span></label>
+          <input type="text" id="topic" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>初稿繳交日期 <span class="required">*</span></label>
+            <input type="date" id="draftDate" required>
+          </div>
+          <div class="form-group">
+            <label>預計上片日期 <span class="required">*</span></label>
+            <input type="date" id="uploadDate" required>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>負責剪輯人員 <span class="required">*</span></label>
+            <div class="input-with-add">
+              <select id="editor" required><option value="">請選擇</option></select>
+              <button type="button" class="btn btn-outline btn-icon" onclick="quickAddEditor()" title="新增人員">+</button>
+              <button type="button" class="btn btn-outline btn-icon" onclick="quickDelEditor()" title="刪除人員" style="color:var(--danger)">−</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label>狀態 <span class="required">*</span></label>
+            <select id="status" required>
+              <option value="">請選擇狀態</option>
+              <option value="待分配">待分配</option><option value="剪輯中">剪輯中</option>
+              <option value="初稿修改中">初稿修改中</option><option value="客戶確認中">客戶確認中</option>
+              <option value="已完成">已完成</option><option value="已上傳雲端">已上傳雲端</option><option value="已上傳影片">已上傳影片</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>素材連結</label>
+            <input type="url" id="materialLink" placeholder="https://...">
+          </div>
+          <div class="form-group">
+            <label>參考腳本</label>
+            <input type="url" id="scriptLink" placeholder="https://...">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>觀看數（橙果創意營收計算用）</label>
+          <input type="number" id="viewCount" min="0" placeholder="選填">
+        </div>
+        <div class="form-group">
+          <label>需要注意的事項</label>
+          <textarea id="notes" rows="2"></textarea>
+        </div>
+        <div class="form-group">
+          <label>備註</label>
+          <textarea id="remarks" rows="2"></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal()">取消</button>
+      <button class="btn btn-primary" onclick="document.getElementById('videoForm').requestSubmit()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail Modal -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal">
+    <div class="modal-header"><h2>影片任務詳情</h2><button class="modal-close" onclick="closeDetail()">&times;</button></div>
+    <div class="modal-body"><div class="detail-grid" id="detailContent"></div></div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeDetail()">關閉</button></div>
+  </div>
+</div>
+
+<!-- Confirm Modal -->
+<div class="confirm-overlay" id="confirmModal">
+  <div class="confirm-box">
+    <p id="confirmMsg">確定要刪除這筆資料嗎？</p>
+    <div class="confirm-actions">
+      <button class="btn btn-outline" onclick="closeConfirm()">取消</button>
+      <button class="btn btn-danger" onclick="confirmAction()">確定刪除</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+</div>
+
+<script>
+const DONE_STATUSES = ['初稿修改中','客戶確認中','已完成','已上傳雲端','已上傳影片'];
+const FINISHED_STATUSES = ['已上傳影片'];
+const ALL_STATUSES = ['待分配','剪輯中','初稿修改中','客戶確認中','已完成','已上傳雲端','已上傳影片'];
+const DEFAULT_CLIENTS = ['大可為','JGB','婕絲','台中市政府數位發展局','吃喝玩樂','多德仕','和居','恩友友','萬華街區','橙果創意','底迪'];
+const DEFAULT_EDITORS = ['李宥儀','邱麟晴','翁薏惠','陳思妤','高偉翔','楊淳惠','楊斯涵','王彥鈞','賴宇柔','李依珊','顏佳祐','賴彥辰','黃睿妤','劉恩伶','鄭樺薇','胡禎妮','郭佳柔','王晨羽'];
+
+const CLIENT_PRICES = {'大可為':4000,'JGB':2500,'婕絲':2500,'台中市政府數位發展局':10000,'吃喝玩樂':4000,'多德仕':4000,'和居':10000,'恩友友':10000,'萬華街區':0,'橙果創意':-1,'底迪':0};
+const REVENUE_TARGET = 5000000;
+
+const LS_VIDEOS='vd_videos', LS_CLIENTS='vd_clients', LS_EDITORS='vd_editors';
+const LS_CLIENT_PROFILES='vd_client_profiles', LS_EDITOR_PROFILES='vd_editor_profiles';
+const LS_DIDI_MEDIA='vd_didi_media', LS_DIDI_SPEECH='vd_didi_speech', LS_DIDI_SOFTWARE='vd_didi_software';
+
+let videos=[], clients=[], editors=[];
+let clientProfiles={}, editorProfiles={};
+let didiMedia=[], didiSpeech=[], didiSoftware=[];
+let sortKey='upload_date', sortDir='asc', pendingDeleteId=null, serverMode=false;
+
+function toast(m,e){const el=document.createElement('div');el.className='toast'+(e?' error':'');el.textContent=m;document.getElementById('toastContainer').appendChild(el);setTimeout(()=>el.remove(),3000);}
+function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';}
+function fmtDate(d){if(!d)return'-';const p=d.split('-');return`${p[0]}/${p[1]}/${p[2]}`;}
+function daysUntil(ds){if(!ds)return Infinity;const t=new Date();t.setHours(0,0,0,0);const d=new Date(ds);d.setHours(0,0,0,0);return Math.ceil((d-t)/864e5);}
+function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
+function fmtMoney(n){return n.toLocaleString('zh-TW');}
+
+// ── Page switching ──
+function switchPage(id, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (id === 'clients') renderClientProfiles();
+  if (id === 'editors') renderEditorProfiles();
+  if (id === 'didi') renderDidiPage();
+}
+
+// ── Revenue ──
+function calcClientRevenue() {
+  let total = 0;
+  videos.filter(v => v.status === '已上傳影片').forEach(v => {
+    const price = CLIENT_PRICES[v.client_name];
+    if (price === -1) { if ((v.view_count || 0) >= 5500) total += 5500; }
+    else if (price > 0) total += price;
+  });
+  return total;
+}
+
+function calcDidiRevenue() {
+  let media = 0, speech = 0, software = 0;
+  didiMedia.forEach(r => media += (parseFloat(r.sponsor_fee) || 0));
+  didiSpeech.forEach(r => speech += (parseFloat(r.speaker_fee) || 0));
+  didiSoftware.forEach(r => software += (parseFloat(r.monthly_fee) || 0) * (parseInt(r.months) || 0));
+  return { media, speech, software, total: media + speech + software };
+}
+
+function renderRevenue() {
+  const clientRev = calcClientRevenue();
+  const didiRev = calcDidiRevenue();
+  const total = clientRev + didiRev.total;
+  const pct = REVENUE_TARGET > 0 ? (total / REVENUE_TARGET * 100) : 0;
+  const barPct = Math.min(100, pct);
+  const cps = [25,50,75,90];
+  const cpHtml = cps.map(cp => `<span class="rev-cp${pct>=cp?' reached':''}" style="left:${cp}%">${cp}%</span>`).join('');
+  document.getElementById('revenueBar').innerHTML = `
+    <div class="rev-block"><div class="rev-label">2026 年度目標</div><div class="rev-value" style="color:var(--text);font-size:17px">$${fmtMoney(REVENUE_TARGET)}</div></div>
+    <div class="rev-block"><div class="rev-label">客戶影片</div><div class="rev-value" style="color:var(--info);font-size:17px">$${fmtMoney(clientRev)}</div></div>
+    <div class="rev-block"><div class="rev-label">底迪收入</div><div class="rev-value" style="color:#7c3aed;font-size:17px">$${fmtMoney(didiRev.total)}</div></div>
+    <div class="rev-block"><div class="rev-label">實際收入</div><div class="rev-value" style="color:var(--success);font-size:17px">$${fmtMoney(total)}</div></div>
+    <div class="rev-progress-wrap">
+      <div class="rev-progress-label"><span>營收進度</span><span>$${fmtMoney(total)} / $${fmtMoney(REVENUE_TARGET)}</span></div>
+      <div class="rev-progress-outer">
+        <div class="rev-progress-bar"><div class="rev-progress-fill" style="width:${barPct}%"></div></div>
+        <div class="rev-checkpoints">${cpHtml}</div>
+      </div>
+    </div>
+    <div class="rev-pct">${pct.toFixed(1)}%</div>`;
+}
+
+// ── Multi-select ──
+function buildMultiSelect(dropId,items,countId){
+  const drop=document.getElementById(dropId);
+  drop.innerHTML=`<label class="ms-all"><input type="checkbox" onchange="msToggleAll('${dropId}',this.checked,'${countId}')" checked> 全選 / 取消</label>`+
+    items.map(n=>`<label><input type="checkbox" value="${esc(n)}" onchange="msChanged('${dropId}','${countId}')" checked> ${esc(n)}</label>`).join('');
+}
+function toggleDrop(id){const d=document.getElementById(id).querySelector('.ms-drop');document.querySelectorAll('.ms-drop.open').forEach(x=>{if(x!==d)x.classList.remove('open');});d.classList.toggle('open');}
+function msToggleAll(did,ch,cid){document.getElementById(did).querySelectorAll('input[type="checkbox"]').forEach(cb=>cb.checked=ch);msChanged(did,cid);}
+function msChanged(did,cid){
+  const boxes=[...document.getElementById(did).querySelectorAll('input[type="checkbox"]')].filter(cb=>cb.parentElement.className!=='ms-all');
+  const checked=boxes.filter(cb=>cb.checked);
+  const all=document.getElementById(did).querySelector('.ms-all input');
+  if(all)all.checked=checked.length===boxes.length;
+  const c=document.getElementById(cid);
+  if(checked.length===boxes.length||checked.length===0){c.style.display='none';}else{c.style.display='inline';c.textContent=checked.length;}
+  renderTable();
+}
+function getSelectedValues(did){
+  const boxes=[...document.getElementById(did).querySelectorAll('input[type="checkbox"]')].filter(cb=>cb.parentElement.className!=='ms-all');
+  const checked=boxes.filter(cb=>cb.checked);
+  if(checked.length===boxes.length)return null;
+  return new Set(checked.map(cb=>cb.value));
+}
+document.addEventListener('click',e=>{if(!e.target.closest('.ms-wrap'))document.querySelectorAll('.ms-drop.open').forEach(d=>d.classList.remove('open'));});
+
+// ── Storage ──
+async function apiCall(path,opts={}){const res=await fetch(window.location.origin+path,{headers:{'Content-Type':'application/json'},...opts,body:opts.body?JSON.stringify(opts.body):undefined});return res.json();}
+function lsLoad(k,d){const r=localStorage.getItem(k);if(r)return JSON.parse(r);if(d){localStorage.setItem(k,JSON.stringify(d));return d;}return[];}
+function lsSave(k,d){localStorage.setItem(k,JSON.stringify(d));}
+function initLocalDefaults(){
+  if(!localStorage.getItem(LS_CLIENTS))lsSave(LS_CLIENTS,DEFAULT_CLIENTS.map((n,i)=>({id:i+1,name:n})));
+  if(!localStorage.getItem(LS_EDITORS))lsSave(LS_EDITORS,DEFAULT_EDITORS.map((n,i)=>({id:i+1,name:n})));
+}
+
+async function loadAll(){
+  try{
+    const[v,c,e]=await Promise.all([apiCall('/api/videos'),apiCall('/api/clients'),apiCall('/api/editors')]);
+    if(Array.isArray(v)&&Array.isArray(c)){videos=v;clients=c;editors=e;serverMode=true;}else throw new Error();
+    try{clientProfiles=await apiCall('/api/client-profiles');if(!clientProfiles||typeof clientProfiles!=='object')clientProfiles={};}catch{clientProfiles={};}
+    try{editorProfiles=await apiCall('/api/editor-profiles');if(!editorProfiles||typeof editorProfiles!=='object')editorProfiles={};}catch{editorProfiles={};}
+    try{const dm=await apiCall('/api/didi-media');didiMedia=Array.isArray(dm)?dm:[];}catch{didiMedia=[];}
+    try{const ds=await apiCall('/api/didi-speech');didiSpeech=Array.isArray(ds)?ds:[];}catch{didiSpeech=[];}
+    try{const dw=await apiCall('/api/didi-software');didiSoftware=Array.isArray(dw)?dw:[];}catch{didiSoftware=[];}
+  }catch{
+    serverMode=false;
+    initLocalDefaults();
+    videos=lsLoad(LS_VIDEOS,[]);
+    clients=lsLoad(LS_CLIENTS);
+    editors=lsLoad(LS_EDITORS);
+    clientProfiles=JSON.parse(localStorage.getItem(LS_CLIENT_PROFILES)||'{}');
+    editorProfiles=JSON.parse(localStorage.getItem(LS_EDITOR_PROFILES)||'{}');
+    didiMedia=lsLoad(LS_DIDI_MEDIA,[]);
+    didiSpeech=lsLoad(LS_DIDI_SPEECH,[]);
+    didiSoftware=lsLoad(LS_DIDI_SOFTWARE,[]);
+  }
+  populateDropdowns();
+  buildMultiSelect('msStatusDrop',ALL_STATUSES,'msStatusCount');
+  buildMultiSelect('msEditorDrop',editors.map(e=>e.name),'msEditorCount');
+  buildMultiSelect('msClientDrop',clients.map(c=>c.name),'msClientCount');
+  renderRevenue();
+  renderTable();
+}
+
+function populateDropdowns(){
+  [['clientName',clients,'請選擇'],['editor',editors,'請選擇']].forEach(([id,list,ph])=>{
+    const sel=document.getElementById(id);const val=sel.value;
+    sel.innerHTML=`<option value="">${ph}</option>`+list.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('');
+    sel.value=val;
+  });
+}
+
+// ── Quick add ──
+async function quickAddClient(){const name=prompt('輸入新客戶名稱：');if(!name||!name.trim())return;const n=name.trim();if(clients.some(c=>c.name===n)){toast('此客戶已存在',1);return;}if(serverMode){const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}else{clients.push({id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});lsSave(LS_CLIENTS,clients);}toast(`已新增客戶「${n}」`);await loadAll();document.getElementById('clientName').value=n;}
+async function quickAddEditor(){const name=prompt('輸入新人員名稱：');if(!name||!name.trim())return;const n=name.trim();if(editors.some(e=>e.name===n)){toast('此人員已存在',1);return;}if(serverMode){const r=await apiCall('/api/editors',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}else{editors.push({id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1),name:n});lsSave(LS_EDITORS,editors);}toast(`已新增人員「${n}」`);await loadAll();document.getElementById('editor').value=n;}
+
+async function quickDelClient(){
+  const sel=document.getElementById('clientName');const v=sel.value;
+  if(!v){toast('請先從下拉選單選擇要刪除的客戶',1);return;}
+  if(!confirm(`確定要刪除客戶「${v}」嗎？`))return;
+  const c=clients.find(x=>x.name===v);
+  if(serverMode&&c){await apiCall(`/api/clients/${c.id}`,{method:'DELETE'});}
+  else{clients=clients.filter(x=>x.name!==v);lsSave(LS_CLIENTS,clients);}
+  toast(`已刪除客戶「${v}」`);await loadAll();
+}
+async function quickDelEditor(){
+  const sel=document.getElementById('editor');const v=sel.value;
+  if(!v){toast('請先從下拉選單選擇要刪除的人員',1);return;}
+  if(!confirm(`確定要刪除人員「${v}」嗎？`))return;
+  const e=editors.find(x=>x.name===v);
+  if(serverMode&&e){await apiCall(`/api/editors/${e.id}`,{method:'DELETE'});}
+  else{editors=editors.filter(x=>x.name!==v);lsSave(LS_EDITORS,editors);}
+  toast(`已刪除人員「${v}」`);await loadAll();
+}
+
+// ── Stats ──
+function updateStats(){
+  const total=videos.length,editing=videos.filter(d=>d.status==='剪輯中').length;
+  const done=videos.filter(d=>['已完成','已上傳雲端','已上傳影片'].includes(d.status)).length;
+  const overdue=videos.filter(d=>!DONE_STATUSES.includes(d.status)&&daysUntil(d.draft_date)<0).length;
+  const urgent=videos.filter(d=>{if(DONE_STATUSES.includes(d.status))return false;const dy=daysUntil(d.draft_date);return dy>=0&&dy<=3;}).length;
+  document.getElementById('stats').innerHTML=`
+    <div class="stat-card"><div class="label">全部任務</div><div class="value blue">${total}</div></div>
+    <div class="stat-card"><div class="label">剪輯中</div><div class="value yellow">${editing}</div></div>
+    <div class="stat-card"><div class="label">已完成以上</div><div class="value green">${done}</div></div>
+    <div class="stat-card"><div class="label">即將到期（3天內）</div><div class="value" style="color:var(--warning)">${urgent}</div></div>
+    <div class="stat-card"><div class="label">已逾期</div><div class="value red">${overdue}</div></div>`;
+}
+
+// ── Table ──
+function getFiltered(){
+  const q=document.getElementById('searchInput').value.toLowerCase();
+  const sf=getSelectedValues('msStatusDrop'),ef=getSelectedValues('msEditorDrop'),cf=getSelectedValues('msClientDrop');
+  let f=videos.filter(d=>{
+    if(sf&&!sf.has(d.status))return false;if(ef&&!ef.has(d.editor))return false;if(cf&&!cf.has(d.client_name))return false;
+    if(q&&![d.client_name,d.video_id,d.topic,d.editor,d.notes,d.remarks].join(' ').toLowerCase().includes(q))return false;
+    return true;
+  });
+  f.sort((a,b)=>{
+    const af=FINISHED_STATUSES.includes(a.status)?1:0,bf=FINISHED_STATUSES.includes(b.status)?1:0;
+    if(af!==bf)return af-bf;
+    let va=a[sortKey]||'',vb=b[sortKey]||'';
+    if(sortDir==='asc')return va<vb?-1:va>vb?1:0;return va>vb?-1:va<vb?1:0;
+  });
+  return f;
+}
+function sortBy(key){if(sortKey===key)sortDir=sortDir==='asc'?'desc':'asc';else{sortKey=key;sortDir='asc';}renderTable();}
+
+function renderTable(){
+  updateStats();renderRevenue();
+  document.querySelectorAll('thead th').forEach(th=>{th.classList.remove('sorted-asc','sorted-desc');if(th.dataset.key===sortKey)th.classList.add(sortDir==='asc'?'sorted-asc':'sorted-desc');});
+  const filtered=getFiltered(),tb=document.getElementById('tableBody');
+  if(!filtered.length){tb.innerHTML=`<tr><td colspan="9"><div class="empty-state"><div class="icon">📋</div><p>目前沒有符合條件的影片任務</p></div></td></tr>`;return;}
+  tb.innerHTML=filtered.map(d=>{
+    const dy=daysUntil(d.draft_date),isDone=DONE_STATUSES.includes(d.status);
+    const isOD=!isDone&&dy<0,isUR=!isDone&&dy>=0&&dy<=3,isFin=FINISHED_STATUSES.includes(d.status);
+    const bg=isFin?'background:#f8fafc;opacity:.65':isOD?'background:#fef2f2':isUR?'background:#fffbeb':'';
+    const ds=isOD?'color:var(--danger);font-weight:600':isUR?'color:var(--warning);font-weight:600':'';
+    const ot=isOD?'<span class="overdue-tag">逾期</span>':'';
+    return`<tr style="${bg}"><td>${ot}<strong>${esc(d.client_name)}</strong></td><td>${esc(d.video_id)}</td><td>${esc(d.topic)}</td>
+      <td><span class="status-badge status-${d.status}">${d.status}</span></td>
+      <td style="${ds}">${fmtDate(d.draft_date)}</td><td>${fmtDate(d.upload_date)}</td>
+      <td>${esc(d.editor)}</td><td class="note-cell"><span title="${esc(d.notes)}">${esc(d.notes)||'-'}</span></td>
+      <td><div class="actions">
+        <button class="btn btn-outline btn-sm" onclick="viewDetail('${d.id}')">查看</button>
+        <button class="btn btn-primary btn-sm" onclick="editItem('${d.id}')">編輯</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteItem('${d.id}')">刪除</button>
+      </div></td></tr>`;
+  }).join('');
+}
+
+// ── Modal CRUD ──
+function openModal(item){
+  document.getElementById('modalTitle').textContent=item?'編輯影片任務':'新增影片任務';
+  document.getElementById('editId').value=item?item.id:'';
+  document.getElementById('clientName').value=item?item.client_name:'';
+  document.getElementById('videoId').value=item?item.video_id:'';
+  document.getElementById('topic').value=item?item.topic:'';
+  document.getElementById('draftDate').value=item?item.draft_date:'';
+  document.getElementById('uploadDate').value=item?item.upload_date:'';
+  document.getElementById('editor').value=item?item.editor:'';
+  document.getElementById('status').value=item?item.status:'';
+  document.getElementById('materialLink').value=item?(item.material_link||''):'';
+  document.getElementById('scriptLink').value=item?(item.script_link||''):'';
+  document.getElementById('viewCount').value=item?(item.view_count||''):'';
+  document.getElementById('notes').value=item?item.notes:'';
+  document.getElementById('remarks').value=item?item.remarks:'';
+  document.getElementById('formModal').classList.add('active');
+}
+function closeModal(){document.getElementById('formModal').classList.remove('active');document.getElementById('videoForm').reset();}
+
+async function handleSubmit(e){
+  e.preventDefault();const editId=document.getElementById('editId').value;
+  const vc=document.getElementById('viewCount').value;
+  const entry={
+    client_name:document.getElementById('clientName').value,
+    video_id:document.getElementById('videoId').value.trim(),
+    topic:document.getElementById('topic').value.trim(),
+    draft_date:document.getElementById('draftDate').value,
+    upload_date:document.getElementById('uploadDate').value,
+    editor:document.getElementById('editor').value,
+    status:document.getElementById('status').value,
+    material_link:document.getElementById('materialLink').value.trim(),
+    script_link:document.getElementById('scriptLink').value.trim(),
+    view_count:vc?parseInt(vc):0,
+    notes:document.getElementById('notes').value.trim(),
+    remarks:document.getElementById('remarks').value.trim(),
+  };
+  if(serverMode){
+    if(editId){await apiCall(`/api/videos/${editId}`,{method:'PUT',body:entry});toast('任務已更新');}
+    else{await apiCall('/api/videos',{method:'POST',body:entry});toast('任務已新增');}
+  }else{
+    const now=new Date().toISOString();
+    if(editId){const idx=videos.findIndex(v=>v.id===editId);if(idx!==-1)Object.assign(videos[idx],entry,{updated_at:now});toast('任務已更新');}
+    else{videos.push({...entry,id:genId(),created_at:now,updated_at:now});toast('任務已新增');}
+    lsSave(LS_VIDEOS,videos);
+  }
+  closeModal();await loadAll();
+}
+
+function editItem(id){const item=videos.find(d=>d.id===id);if(item)openModal(item);}
+
+function viewDetail(id){
+  const d=videos.find(x=>x.id===id);if(!d)return;
+  const lnk=(u,t)=>u?`<a href="${esc(u)}" target="_blank">${t}</a>`:'-';
+  const fields=[
+    ['客戶名稱',esc(d.client_name)],['影片編號',esc(d.video_id)],['影片主題',esc(d.topic)],
+    ['狀態',`<span class="status-badge status-${d.status}">${d.status}</span>`],
+    ['初稿繳交',fmtDate(d.draft_date)],['預計上片',fmtDate(d.upload_date)],['剪輯人員',esc(d.editor)],
+    ['素材連結',lnk(d.material_link,'開啟連結')],['參考腳本',lnk(d.script_link,'開啟連結')],
+    ['觀看數',d.view_count||'-'],
+    ['注意事項',esc(d.notes)||'-'],['備註',esc(d.remarks)||'-'],
+    ['建立時間',d.created_at?new Date(d.created_at).toLocaleString('zh-TW'):'-'],
+    ['更新時間',d.updated_at?new Date(d.updated_at).toLocaleString('zh-TW'):'-'],
+  ];
+  document.getElementById('detailContent').innerHTML=fields.map(([l,v])=>`<div class="detail-label">${l}</div><div class="detail-value">${v}</div>`).join('');
+  document.getElementById('detailModal').classList.add('active');
+}
+function closeDetail(){document.getElementById('detailModal').classList.remove('active');}
+
+function deleteItem(id){pendingDeleteId=id;document.getElementById('confirmModal').classList.add('active');}
+function closeConfirm(){document.getElementById('confirmModal').classList.remove('active');pendingDeleteId=null;window._confirmCb=null;}
+async function confirmAction(){
+  if(window._confirmCb){
+    await window._confirmCb();
+    window._confirmCb=null;
+  } else if(pendingDeleteId){
+    if(serverMode)await apiCall(`/api/videos/${pendingDeleteId}`,{method:'DELETE'});
+    else{videos=videos.filter(d=>d.id!==pendingDeleteId);lsSave(LS_VIDEOS,videos);}
+    toast('任務已刪除');await loadAll();
+  }
+  closeConfirm();
+}
+
+function exportCSV(){
+  if(!videos.length){toast('沒有資料可匯出',1);return;}
+  const h=['客戶名稱','影片編號','影片主題','狀態','初稿繳交日期','預計上片日期','剪輯人員','素材連結','參考腳本','觀看數','注意事項','備註'];
+  const k=['client_name','video_id','topic','status','draft_date','upload_date','editor','material_link','script_link','view_count','notes','remarks'];
+  const rows=['\uFEFF'+h.join(','),...videos.map(d=>k.map(key=>`"${(String(d[key]||'')).replace(/"/g,'""')}"`).join(','))];
+  const blob=new Blob([rows.join('\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;
+  a.download=`影片管理_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url);toast('CSV 已匯出');
+}
+
+async function triggerOverdueCheck(){
+  if(!serverMode){toast('LINE 提醒需要啟動伺服器才能使用',true);return;}
+  toast('正在檢查逾期任務...');const r=await apiCall('/api/check-overdue',{method:'POST'});toast(r.message,!r.sent&&r.count>0);
+}
+
+// ── Client Profiles (Page 2) — excludes 底迪 ──
+
+function getClientProfile(name){return clientProfiles[name]||{current_followers:0,target_followers:0,reminders:'',social_ig:'',social_threads:'',social_tiktok:'',social_fb:'',social_line_voom:'',social_youtube:''};}
+
+function saveClientProfile(name,data){
+  clientProfiles[name]=data;
+  if(serverMode){apiCall('/api/client-profiles',{method:'POST',body:{name,...data}});}
+  else{lsSave(LS_CLIENT_PROFILES,clientProfiles);}
+}
+
+const CLIENT_EXTRA_SOCIAL = {'吃喝玩樂':['line_voom','Line Voom'],'多德仕':['youtube','YouTube']};
+
+function renderClientProfiles(){
+  const grid=document.getElementById('clientProfileGrid');
+  const names=clients.map(c=>c.name).filter(n=>n!=='底迪');
+  grid.innerHTML=names.map(name=>{
+    const p=getClientProfile(name);
+    const clientVideos=videos.filter(v=>v.client_name===name&&v.status==='已上傳影片');
+    const price=CLIENT_PRICES[name];
+    const priceLabel=price===-1?'觀看數>=5500: $5,500/支':price>0?`$${fmtMoney(price)}/支`:'無計費';
+    const videoRows=clientVideos.length?clientVideos.map(v=>`<tr>
+      <td>${esc(v.video_id)}</td><td>${esc(v.topic)}</td><td>${fmtDate(v.upload_date)}</td>
+      <td><input type="number" value="${v.view_count||0}" min="0" onchange="updateVideoViewCount('${v.id}',this.value)"></td>
+    </tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text2)">尚無已上傳影片</td></tr>';
+
+    const socialFields = [['social_ig','IG'],['social_threads','Threads'],['social_tiktok','TikTok'],['social_fb','FB']];
+    const extra = CLIENT_EXTRA_SOCIAL[name];
+    if(extra) socialFields.push(['social_'+extra[0], extra[1]]);
+
+    const socialHtml = socialFields.map(([key,label])=>`
+      <div class="profile-field" style="margin-bottom:6px">
+        <label>${label}</label>
+        <input type="url" value="${esc(p[key]||'')}" placeholder="https://..." onchange="onClientFieldChange('${esc(name)}','${key}',this.value)" style="font-size:12px;padding:5px 8px">
+      </div>`).join('');
+
+    return`<div class="profile-card">
+      <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${esc(name)} <span style="font-size:12px;font-weight:400;color:var(--text2)">${priceLabel}</span>
+        <button class="btn btn-danger btn-sm" style="margin-left:auto;font-size:11px;padding:3px 8px" onclick="confirmDeleteClient('${esc(name)}')">刪除客戶</button></h3>
+      <div class="profile-row">
+        <div class="profile-field"><label>目前粉絲數</label><input type="number" value="${p.current_followers||0}" min="0" onchange="onClientFieldChange('${esc(name)}','current_followers',this.value)"></div>
+        <div class="profile-field"><label>目標粉絲數</label><input type="number" value="${p.target_followers||0}" min="0" onchange="onClientFieldChange('${esc(name)}','target_followers',this.value)"></div>
+      </div>
+      <div class="profile-field"><label style="margin-bottom:6px">社群媒體連結</label>
+        <div class="profile-row" style="grid-template-columns:1fr 1fr">${socialHtml}</div>
+      </div>
+      <div class="profile-field"><label>影片成效（已上傳 ${clientVideos.length} 支）</label>
+        <div class="mini-table-wrap"><table class="profile-mini-table"><thead><tr><th>編號</th><th>主題</th><th>上片日</th><th>觀看數</th></tr></thead><tbody>${videoRows}</tbody></table></div>
+      </div>
+      <div class="profile-field"><label>提醒事項</label><textarea rows="2" onchange="onClientFieldChange('${esc(name)}','reminders',this.value)">${esc(p.reminders||'')}</textarea></div>
+    </div>`;
+  }).join('');
+}
+
+function onClientFieldChange(name,field,value){const p=getClientProfile(name);p[field]=field.startsWith('social_')||field==='reminders'?value:parseInt(value)||0;saveClientProfile(name,p);}
+
+function confirmDeleteClient(name){
+  pendingDeleteId=null;
+  document.getElementById('confirmMsg').textContent=`確定要刪除客戶「${name}」嗎？此操作無法復原。`;
+  window._confirmCb=async()=>{
+    const c=clients.find(x=>x.name===name);
+    if(serverMode&&c){await apiCall(`/api/clients/${c.id}`,{method:'DELETE'});}
+    else{clients=clients.filter(x=>x.name!==name);lsSave(LS_CLIENTS,clients);}
+    toast(`已刪除客戶「${name}」`);await loadAll();renderClientProfiles();
+  };
+  document.getElementById('confirmModal').classList.add('active');
+}
+
+function confirmDeleteEditor(name){
+  pendingDeleteId=null;
+  document.getElementById('confirmMsg').textContent=`確定要刪除剪輯人員「${name}」嗎？此操作無法復原。`;
+  window._confirmCb=async()=>{
+    const e=editors.find(x=>x.name===name);
+    if(serverMode&&e){await apiCall(`/api/editors/${e.id}`,{method:'DELETE'});}
+    else{editors=editors.filter(x=>x.name!==name);lsSave(LS_EDITORS,editors);}
+    toast(`已刪除人員「${name}」`);await loadAll();renderEditorProfiles();
+  };
+  document.getElementById('confirmModal').classList.add('active');
+}
+
+async function addClientFromProfile(){
+  const name=prompt('輸入新客戶名稱：');if(!name||!name.trim())return;
+  const n=name.trim();
+  if(clients.some(c=>c.name===n)){toast('此客戶已存在',1);return;}
+  if(serverMode){const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}
+  else{clients.push({id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});lsSave(LS_CLIENTS,clients);}
+  toast(`已新增客戶「${n}」`);await loadAll();renderClientProfiles();
+}
+
+async function updateVideoViewCount(id,val){
+  const vc=parseInt(val)||0;
+  if(serverMode){await apiCall(`/api/videos/${id}`,{method:'PUT',body:{view_count:vc}});}
+  else{const v=videos.find(d=>d.id===id);if(v){v.view_count=vc;v.updated_at=new Date().toISOString();}lsSave(LS_VIDEOS,videos);}
+  await loadAll();renderClientProfiles();
+}
+
+// ── Editor Profiles (Page 3) ──
+
+function getEditorProfile(name){return editorProfiles[name]||{work_status:'開工',return_date:'',pros:'',cons:'',suitable_clients:[],notes:''};}
+
+function saveEditorProfile(name,data){
+  editorProfiles[name]=data;
+  if(serverMode){apiCall('/api/editor-profiles',{method:'POST',body:{name,...data}});}
+  else{lsSave(LS_EDITOR_PROFILES,editorProfiles);}
+}
+
+function renderEditorProfiles(){
+  const grid=document.getElementById('editorProfileGrid');
+  const clientNames=clients.map(c=>c.name);
+  grid.innerHTML=editors.map(ed=>{
+    const p=getEditorProfile(ed.name);
+    const ws=p.work_status||'開工';
+    const assignedVideos=videos.filter(v=>v.editor===ed.name&&!FINISHED_STATUSES.includes(v.status)).length;
+    const cbHtml=clientNames.map(cn=>{
+      const checked=(p.suitable_clients||[]).includes(cn)?'checked':'';
+      return`<label><input type="checkbox" value="${esc(cn)}" ${checked} onchange="onEditorSuitableChange('${esc(ed.name)}')"> ${esc(cn)}</label>`;
+    }).join('');
+    return`<div class="profile-card">
+      <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${esc(ed.name)} <span class="work-status-badge ws-${ws}">${ws}</span>
+        <span style="font-size:12px;font-weight:400;color:var(--text2)">進行中: ${assignedVideos} 支</span>
+        <button class="btn btn-danger btn-sm" style="margin-left:auto;font-size:11px;padding:3px 8px" onclick="confirmDeleteEditor('${esc(ed.name)}')">刪除人員</button></h3>
+      <div class="profile-row">
+        <div class="profile-field"><label>工作狀態</label>
+          <select onchange="onEditorFieldChange('${esc(ed.name)}','work_status',this.value);renderEditorProfiles()">
+            <option value="開工" ${ws==='開工'?'selected':''}>開工</option>
+            <option value="暫時休息" ${ws==='暫時休息'?'selected':''}>暫時休息</option>
+            <option value="暫停" ${ws==='暫停'?'selected':''}>暫停</option>
+          </select>
+        </div>
+        ${ws==='暫時休息'?`<div class="profile-field"><label>預計回歸日期</label><input type="date" value="${p.return_date||''}" onchange="onEditorFieldChange('${esc(ed.name)}','return_date',this.value)"></div>`:'<div></div>'}
+      </div>
+      <div class="profile-row">
+        <div class="profile-field"><label>優點</label><textarea rows="2" onchange="onEditorFieldChange('${esc(ed.name)}','pros',this.value)">${esc(p.pros||'')}</textarea></div>
+        <div class="profile-field"><label>缺點</label><textarea rows="2" onchange="onEditorFieldChange('${esc(ed.name)}','cons',this.value)">${esc(p.cons||'')}</textarea></div>
+      </div>
+      <div class="profile-field"><label>適合剪輯的客戶影片</label><div class="cb-grid" id="cb-${esc(ed.name)}">${cbHtml}</div></div>
+      <div class="profile-field"><label>注意事項</label><textarea rows="2" onchange="onEditorFieldChange('${esc(ed.name)}','notes',this.value)">${esc(p.notes||'')}</textarea></div>
+    </div>`;
+  }).join('');
+}
+
+function onEditorFieldChange(name,field,value){const p=getEditorProfile(name);p[field]=value;saveEditorProfile(name,p);}
+
+async function addEditorFromProfile(){
+  const name=prompt('輸入新人員名稱：');if(!name||!name.trim())return;
+  const n=name.trim();
+  if(editors.some(e=>e.name===n)){toast('此人員已存在',1);return;}
+  if(serverMode){const r=await apiCall('/api/editors',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}
+  else{editors.push({id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1),name:n});lsSave(LS_EDITORS,editors);}
+  toast(`已新增人員「${n}」`);await loadAll();renderEditorProfiles();
+}
+
+function onEditorSuitableChange(name){
+  const cbs=[...document.querySelectorAll(`#cb-${CSS.escape(name)} input[type="checkbox"]`)];
+  const p=getEditorProfile(name);p.suitable_clients=cbs.filter(cb=>cb.checked).map(cb=>cb.value);saveEditorProfile(name,p);
+}
+
+// ══════════════════════════════════════════
+// ── Didi Page (Page 4) ──
+// ══════════════════════════════════════════
+
+function saveDidiData(type){
+  if(type==='media'){if(serverMode)apiCall('/api/didi-media',{method:'POST',body:didiMedia});else lsSave(LS_DIDI_MEDIA,didiMedia);}
+  if(type==='speech'){if(serverMode)apiCall('/api/didi-speech',{method:'POST',body:didiSpeech});else lsSave(LS_DIDI_SPEECH,didiSpeech);}
+  if(type==='software'){if(serverMode)apiCall('/api/didi-software',{method:'POST',body:didiSoftware});else lsSave(LS_DIDI_SOFTWARE,didiSoftware);}
+  renderRevenue();
+}
+
+function renderDidiPage(){renderDidiMedia();renderDidiSpeech();renderDidiSoftware();}
+
+// ── 自媒體記錄 ──
+function addDidiMedia(){
+  didiMedia.push({id:genId(),title:'',date:'',platform:'IG',view_count:0,sponsor_fee:0,remarks:''});
+  saveDidiData('media');renderDidiMedia();
+}
+function delDidiMedia(id){didiMedia=didiMedia.filter(r=>r.id!==id);saveDidiData('media');renderDidiMedia();}
+function onDidiMediaChange(id,field,value){
+  const r=didiMedia.find(x=>x.id===id);if(!r)return;
+  r[field]=(field==='view_count'||field==='sponsor_fee')?parseFloat(value)||0:value;
+  saveDidiData('media');
+  if(field==='sponsor_fee')renderRevenue();
+}
+function renderDidiMedia(){
+  const el=document.getElementById('didiMediaSection');
+  const subtotal=didiMedia.reduce((s,r)=>s+(parseFloat(r.sponsor_fee)||0),0);
+  const rows=didiMedia.map(r=>`<tr>
+    <td><input type="text" value="${esc(r.title)}" onchange="onDidiMediaChange('${r.id}','title',this.value)" style="min-width:100px"></td>
+    <td><input type="date" value="${r.date||''}" onchange="onDidiMediaChange('${r.id}','date',this.value)"></td>
+    <td><select onchange="onDidiMediaChange('${r.id}','platform',this.value)">
+      ${['IG','Threads','FB','TikTok'].map(p=>`<option ${r.platform===p?'selected':''}>${p}</option>`).join('')}
+    </select></td>
+    <td><input type="number" value="${r.view_count||0}" min="0" onchange="onDidiMediaChange('${r.id}','view_count',this.value)" style="width:70px"></td>
+    <td><input type="number" value="${r.sponsor_fee||0}" min="0" onchange="onDidiMediaChange('${r.id}','sponsor_fee',this.value)" style="width:80px"></td>
+    <td><input type="text" value="${esc(r.remarks||'')}" onchange="onDidiMediaChange('${r.id}','remarks',this.value)" style="min-width:80px"></td>
+    <td><button class="btn btn-danger btn-sm" onclick="delDidiMedia('${r.id}')">刪除</button></td>
+  </tr>`).join('');
+  el.innerHTML=`<h3>自媒體記錄 <button class="btn btn-primary btn-sm" onclick="addDidiMedia()">＋ 新增</button></h3>
+    <div class="didi-table-wrap"><table class="didi-table"><thead><tr><th>影片標題</th><th>日期</th><th>平台</th><th>觀看數</th><th>業配金額</th><th>備註</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--text2)">尚無記錄</td></tr>'}</tbody></table></div>
+    <div class="didi-subtotal">業配收入小計：$${fmtMoney(subtotal)}</div>`;
+}
+
+// ── 演講/講課紀錄 ──
+function addDidiSpeech(){
+  didiSpeech.push({id:genId(),org:'',date:'',location:'',topic:'',photo_url:'',feedback:'',speaker_fee:0});
+  saveDidiData('speech');renderDidiSpeech();
+}
+function delDidiSpeech(id){didiSpeech=didiSpeech.filter(r=>r.id!==id);saveDidiData('speech');renderDidiSpeech();}
+function onDidiSpeechChange(id,field,value){
+  const r=didiSpeech.find(x=>x.id===id);if(!r)return;
+  r[field]=(field==='speaker_fee')?parseFloat(value)||0:value;
+  saveDidiData('speech');
+  if(field==='speaker_fee')renderRevenue();
+}
+function renderDidiSpeech(){
+  const el=document.getElementById('didiSpeechSection');
+  const subtotal=didiSpeech.reduce((s,r)=>s+(parseFloat(r.speaker_fee)||0),0);
+  const rows=didiSpeech.map(r=>`<tr>
+    <td><input type="text" value="${esc(r.org)}" onchange="onDidiSpeechChange('${r.id}','org',this.value)" style="min-width:80px"></td>
+    <td><input type="date" value="${r.date||''}" onchange="onDidiSpeechChange('${r.id}','date',this.value)"></td>
+    <td><input type="text" value="${esc(r.location||'')}" onchange="onDidiSpeechChange('${r.id}','location',this.value)" style="min-width:60px"></td>
+    <td><input type="text" value="${esc(r.topic||'')}" onchange="onDidiSpeechChange('${r.id}','topic',this.value)" style="min-width:80px"></td>
+    <td>${r.photo_url?`<a href="${esc(r.photo_url)}" target="_blank" style="font-size:12px">查看</a> `:''}
+      <input type="url" value="${esc(r.photo_url||'')}" onchange="onDidiSpeechChange('${r.id}','photo_url',this.value)" placeholder="URL" style="width:80px;font-size:11px"></td>
+    <td><textarea onchange="onDidiSpeechChange('${r.id}','feedback',this.value)" style="min-width:100px">${esc(r.feedback||'')}</textarea></td>
+    <td><input type="number" value="${r.speaker_fee||0}" min="0" onchange="onDidiSpeechChange('${r.id}','speaker_fee',this.value)" style="width:80px"></td>
+    <td><button class="btn btn-danger btn-sm" onclick="delDidiSpeech('${r.id}')">刪除</button></td>
+  </tr>`).join('');
+  el.innerHTML=`<h3>演講 / 講課紀錄 <button class="btn btn-primary btn-sm" onclick="addDidiSpeech()">＋ 新增</button></h3>
+    <div class="didi-table-wrap"><table class="didi-table"><thead><tr><th>單位</th><th>日期</th><th>地點</th><th>講題</th><th>照片</th><th>反應 & 可優化</th><th>講師費</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--text2)">尚無記錄</td></tr>'}</tbody></table></div>
+    <div class="didi-subtotal">講師費小計：$${fmtMoney(subtotal)}</div>`;
+}
+
+// ── 軟體收入 ──
+function addDidiSoftware(){
+  didiSoftware.push({id:genId(),client_name:'',monthly_fee:0,months:0});
+  saveDidiData('software');renderDidiSoftware();
+}
+function delDidiSoftware(id){didiSoftware=didiSoftware.filter(r=>r.id!==id);saveDidiData('software');renderDidiSoftware();}
+function onDidiSoftwareChange(id,field,value){
+  const r=didiSoftware.find(x=>x.id===id);if(!r)return;
+  r[field]=(field==='monthly_fee'||field==='months')?parseFloat(value)||0:value;
+  saveDidiData('software');renderDidiSoftware();renderRevenue();
+}
+function renderDidiSoftware(){
+  const el=document.getElementById('didiSoftwareSection');
+  let grandTotal=0;
+  const rows=didiSoftware.map(r=>{
+    const sub=(parseFloat(r.monthly_fee)||0)*(parseInt(r.months)||0);grandTotal+=sub;
+    const opts=clients.map(c=>`<option value="${esc(c.name)}"${c.name===r.client_name?' selected':''}>${esc(c.name)}</option>`).join('');
+    return`<tr>
+    <td><select onchange="onDidiSoftwareChange('${r.id}','client_name',this.value)" style="min-width:100px">
+      <option value="">請選擇</option>${opts}
+    </select></td>
+    <td><input type="number" value="${r.monthly_fee||0}" min="0" onchange="onDidiSoftwareChange('${r.id}','monthly_fee',this.value)" style="width:80px"></td>
+    <td><input type="number" value="${r.months||0}" min="0" onchange="onDidiSoftwareChange('${r.id}','months',this.value)" style="width:60px"></td>
+    <td style="font-weight:600">$${fmtMoney(sub)}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="delDidiSoftware('${r.id}')">刪除</button></td>
+  </tr>`;
+  }).join('');
+  el.innerHTML=`<h3>軟體收入 <button class="btn btn-primary btn-sm" onclick="addDidiSoftware()">＋ 新增</button></h3>
+    <div class="didi-table-wrap"><table class="didi-table"><thead><tr><th>客戶名稱</th><th>月費</th><th>訂購月份</th><th>小計</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="5" style="text-align:center;color:var(--text2)">尚無記錄</td></tr>'}</tbody></table></div>
+    <div class="didi-subtotal">軟體收入小計：$${fmtMoney(grandTotal)}</div>`;
+}
+
+// ── Init ──
+document.querySelectorAll('.modal-overlay').forEach(o=>{o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('active');});});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay.active, .confirm-overlay.active').forEach(m=>m.classList.remove('active'));});
+
+loadAll();
+</script>
+</body>
+</html>
