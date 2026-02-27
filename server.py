@@ -1,6 +1,6 @@
 import os
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 
 from flask import Flask, request, jsonify, send_file, abort
 from flask_cors import CORS
@@ -45,6 +45,8 @@ if LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN:
     _cfg = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
     _api_client = ApiClient(_cfg)
     line_api = MessagingApi(_api_client)
+
+TZ_TW = timezone(timedelta(hours=8))
 
 STATUSES = ['待分配', '剪輯中', '初稿修改中', '客戶確認中', '已完成', '已上傳雲端', '已上傳影片']
 DONE_STATUSES = ['初稿修改中', '客戶確認中', '已完成', '已上傳雲端', '已上傳影片']
@@ -469,7 +471,7 @@ def save_didi_software():
 # ── Overdue logic ──
 
 def get_overdue_items():
-    today = date.today().isoformat()
+    today = datetime.now(TZ_TW).date().isoformat()
     return Video.query.filter(
         Video.status.notin_(DONE_STATUSES),
         Video.draft_date < today
@@ -479,7 +481,7 @@ def get_overdue_items():
 def build_overdue_message(items):
     if not items:
         return None
-    today = date.today()
+    today = datetime.now(TZ_TW).date()
     msg = f"⚠️ 短影片初稿逾期提醒（{len(items)} 筆）\n{'─' * 20}\n\n"
     for i, d in enumerate(items, 1):
         draft = datetime.strptime(d.draft_date, "%Y-%m-%d").date()
