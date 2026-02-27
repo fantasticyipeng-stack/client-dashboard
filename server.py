@@ -536,17 +536,24 @@ def api_check_overdue():
 
 # ── LINE Webhook ──
 
-@app.route("/webhook", methods=["POST"])
+@app.route("/webhook", methods=["GET", "POST"])
 def webhook():
+    if request.method == "GET":
+        return "OK", 200
     if not line_handler:
-        abort(500, "LINE not configured")
+        print("[Webhook] line_handler not initialized — check LINE env vars")
+        return "LINE not configured", 200
     signature = request.headers.get("X-Line-Signature", "")
     body = request.get_data(as_text=True)
+    print(f"[Webhook] Received event, body length={len(body)}")
     try:
         line_handler.handle(body, signature)
     except InvalidSignatureError:
+        print("[Webhook] Invalid signature")
         abort(400)
-    return "OK"
+    except Exception as e:
+        print(f"[Webhook] Error: {e}")
+    return "OK", 200
 
 
 def reply_line(reply_token, text):
@@ -720,18 +727,25 @@ def migrate_db():
 
 
 with app.app_context():
-    db.create_all()
-    migrate_db()
-    seed_defaults()
+    try:
+        db.create_all()
+        migrate_db()
+        seed_defaults()
+        print("[Startup] Database initialized successfully.")
+    except Exception as e:
+        print(f"[Startup ERROR] {e}")
+
+
+# Scheduler — runs in both gunicorn and standalone mode
+_scheduler = BackgroundScheduler()
+_check_hour = int(os.getenv("CHECK_HOUR", "9"))
+_check_minute = int(os.getenv("CHECK_MINUTE", "0"))
+_scheduler.add_job(scheduled_overdue_check, "cron", hour=_check_hour, minute=_check_minute)
+_scheduler.start()
+print(f"[Scheduler] Daily overdue check at {_check_hour:02d}:{_check_minute:02d}")
+
 
 if __name__ == "__main__":
-    scheduler = BackgroundScheduler()
-    check_hour = int(os.getenv("CHECK_HOUR", "9"))
-    check_minute = int(os.getenv("CHECK_MINUTE", "0"))
-    scheduler.add_job(scheduled_overdue_check, "cron", hour=check_hour, minute=check_minute)
-    scheduler.start()
-    print(f"[Scheduler] Daily overdue check at {check_hour:02d}:{check_minute:02d}")
-
     port = int(os.getenv("PORT", "5000"))
     print(f"Dashboard running at http://localhost:{port}")
     app.run(host="0.0.0.0", port=port, debug=False)
