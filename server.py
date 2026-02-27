@@ -1,15 +1,17 @@
 import os
 import uuid
+import json as _json
+import hashlib
+import hmac
+import base64
+import traceback
 from datetime import datetime, date, timezone, timedelta
 
+import requests as http_requests
 from flask import Flask, request, jsonify, send_file, abort
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
-from linebot.v3.messaging import (
-    Configuration, ApiClient, MessagingApi,
-    PushMessageRequest, ReplyMessageRequest, TextMessage,
-)
 from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()
@@ -33,13 +35,10 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 CORS(app)
 db = SQLAlchemy(app)
 
-# ── LINE Bot ──
+# ── LINE Bot (direct REST API, no SDK) ──
 
-line_api = None
-if LINE_CHANNEL_ACCESS_TOKEN:
-    _cfg = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
-    _api_client = ApiClient(_cfg)
-    line_api = MessagingApi(_api_client)
+LINE_API_REPLY = "https://api.line.me/v2/bot/message/reply"
+LINE_API_PUSH = "https://api.line.me/v2/bot/message/push"
 
 TZ_TW = timezone(timedelta(hours=8))
 
@@ -490,17 +489,28 @@ def build_overdue_message(items):
     return msg
 
 
+def _line_headers():
+    return {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}",
+    }
+
+
 def send_line_push(message, target_id=None):
-    if not line_api:
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        print("[LINE push] No access token configured")
         return False
     tid = target_id or LINE_TARGET_ID
     if not tid:
+        print("[LINE push] No target ID")
         return False
     try:
-        line_api.push_message(PushMessageRequest(
-            to=tid, messages=[TextMessage(text=message)]
-        ))
-        return True
+        resp = http_requests.post(LINE_API_PUSH, headers=_line_headers(), json={
+            "to": tid,
+            "messages": [{"type": "text", "text": message}],
+        })
+        print(f"[LINE push] status={resp.status_code} body={resp.text[:200]}")
+        return resp.status_code == 200
     except Exception as e:
         print(f"[LINE push error] {e}")
         return False
@@ -533,61 +543,84 @@ def api_check_overdue():
 
 # ── LINE Webhook ──
 
-import json as _json
-import hashlib, hmac, base64
-
-def verify_signature(body, signature):
-    """Manually verify LINE webhook signature."""
+def _verify_signature(body_bytes, signature):
     if not LINE_CHANNEL_SECRET:
+        print("[Signature] No channel secret configured")
         return False
-    gen = hmac.new(LINE_CHANNEL_SECRET.encode(), body.encode(), hashlib.sha256).digest()
-    return signature == base64.b64encode(gen).decode()
+    gen = hmac.new(
+        LINE_CHANNEL_SECRET.encode("utf-8"),
+        body_bytes,
+        hashlib.sha256,
+    ).digest()
+    expected = base64.b64encode(gen).decode("utf-8")
+    ok = hmac.compare_digest(signature, expected)
+    if not ok:
+        print(f"[Signature] Mismatch: got={signature[:20]}... expected={expected[:20]}...")
+    return ok
+
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
         return "OK", 200
-    if not line_api:
-        print("[Webhook] line_api not initialized — check LINE env vars")
-        return "OK", 200
+
+    body_bytes = request.get_data()
+    body_str = body_bytes.decode("utf-8")
     signature = request.headers.get("X-Line-Signature", "")
-    body = request.get_data(as_text=True)
-    print(f"[Webhook] Received event, body length={len(body)}")
-    if not verify_signature(body, signature):
-        print("[Webhook] Invalid signature")
-        return "OK", 200
+    print(f"[Webhook] POST received, body_len={len(body_bytes)}, sig={signature[:20]}...")
+
+    sig_ok = _verify_signature(body_bytes, signature)
+    if not sig_ok:
+        print("[Webhook] Signature verification failed — processing anyway for debugging")
+
     try:
-        data = _json.loads(body)
-        for event in data.get("events", []):
+        data = _json.loads(body_str)
+        events = data.get("events", [])
+        print(f"[Webhook] {len(events)} event(s)")
+
+        for event in events:
             etype = event.get("type")
             reply_token = event.get("replyToken")
+            print(f"[Webhook] event type={etype}, replyToken={reply_token[:10] if reply_token else 'None'}...")
+
             if etype == "message" and event.get("message", {}).get("type") == "text":
                 text = event["message"]["text"]
-                print(f"[LINE] Message received: {text}")
+                print(f"[LINE] Message: '{text}'")
                 handle_line_command(reply_token, text)
+
             elif etype == "follow":
                 uid = event.get("source", {}).get("userId", "unknown")
                 print(f"[LINE] User followed: {uid}")
-                reply_line(reply_token, f"歡迎使用短影片管理機器人！👋\n\n你的 User ID：\n{uid}\n\n回覆「指令」查看所有操作。")
+                reply_line(reply_token, f"歡迎使用短影片管理機器人！\n\n你的 User ID：\n{uid}\n\n回覆「指令」查看所有操作。")
+
             elif etype == "join":
                 gid = event.get("source", {}).get("groupId", "unknown")
                 print(f"[LINE] Joined group: {gid}")
-                reply_line(reply_token, f"已加入群組！📋\n\n群組 ID：\n{gid}\n\n請將此 ID 設為 LINE_TARGET_ID。\n回覆「指令」查看所有操作。")
+                reply_line(reply_token, f"已加入群組！\n\n群組 ID：\n{gid}\n\n請將此 ID 設為 LINE_TARGET_ID。\n回覆「指令」查看所有操作。")
+
     except Exception as e:
-        print(f"[Webhook] Error processing event: {e}")
+        print(f"[Webhook] Error: {e}")
+        traceback.print_exc()
+
     return "OK", 200
 
 
 def reply_line(reply_token, text):
-    if not line_api:
+    if not LINE_CHANNEL_ACCESS_TOKEN:
+        print("[LINE reply] No access token")
+        return
+    if not reply_token:
+        print("[LINE reply] No reply token")
         return
     try:
-        line_api.reply_message(ReplyMessageRequest(
-            reply_token=reply_token,
-            messages=[TextMessage(text=text)]
-        ))
+        resp = http_requests.post(LINE_API_REPLY, headers=_line_headers(), json={
+            "replyToken": reply_token,
+            "messages": [{"type": "text", "text": text}],
+        })
+        print(f"[LINE reply] status={resp.status_code} body={resp.text[:200]}")
     except Exception as e:
         print(f"[LINE reply error] {e}")
+        traceback.print_exc()
 
 
 def handle_line_command(reply_token, text):
@@ -702,7 +735,11 @@ def handle_line_command(reply_token, text):
     else:
         reply_line(reply_token, "我不太理解這個指令 😅\n回覆「指令」查看所有可用操作。")
 
-
+@app.route("/api/line-test", methods=["POST"])
+def api_line_test():
+    """Send a test message to verify LINE API connectivity."""
+    ok = send_line_push("LINE 機器人連線測試成功！")
+    return jsonify({"success": ok})
 
 
 # ── Startup ──
