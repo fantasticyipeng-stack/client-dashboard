@@ -224,6 +224,7 @@ textarea { resize: vertical; min-height: 50px; }
   <h1>小跟拍戰情版</h1>
   <div class="header-right">
     <button class="btn btn-white" onclick="triggerOverdueCheck()">LINE 逾期提醒</button>
+    <button class="btn btn-white" onclick="triggerDailyUpdate()">LINE 每日戰情</button>
     <button class="btn btn-white" onclick="exportCSV()">匯出 CSV</button>
     <button class="btn btn-white" onclick="openModal()">＋ 新增影片任務</button>
   </div>
@@ -717,6 +718,10 @@ function exportCSV(){
 async function triggerOverdueCheck(){
   if(!serverMode){toast('LINE 提醒需要啟動伺服器才能使用',true);return;}
   toast('正在檢查逾期任務...');const r=await apiCall('/api/check-overdue',{method:'POST'});toast(r.message,!r.sent&&r.count>0);
+}
+async function triggerDailyUpdate(){
+  if(!serverMode){toast('LINE 提醒需要啟動伺服器才能使用',true);return;}
+  toast('正在發送每日戰情...');const r=await apiCall('/api/daily-update',{method:'POST'});toast(r.success?'已發送每日戰情到 LINE':'發送失敗',!r.success);
 }
 
 // ── Client Profiles (Page 2) — excludes 底迪 ──

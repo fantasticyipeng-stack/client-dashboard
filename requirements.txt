@@ -4,5 +4,6 @@ flask-sqlalchemy
 python-dotenv
 requests
 apscheduler
+pytz
 gunicorn
 psycopg2-binary

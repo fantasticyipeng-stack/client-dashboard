@@ -516,6 +516,83 @@ def send_line_push(message, target_id=None):
         return False
 
 
+CLIENT_PRICES = {
+    '大可為': 4000, 'JGB': 2500, '婕絲': 2500,
+    '台中市政府數位發展局': 10000, '吃喝玩樂': 4000, '多德仕': 4000,
+    '和居': 10000, '恩友友': 10000, '萬華街區': 0,
+    '橙果創意': -1, '底迪': 0,
+}
+REVENUE_TARGET = 5000000
+
+
+def calc_total_revenue():
+    """Calculate total revenue matching dashboard logic."""
+    client_rev = 0
+    uploaded = Video.query.filter_by(status='已上傳影片').all()
+    for v in uploaded:
+        price = CLIENT_PRICES.get(v.client_name, 0)
+        if price == -1:
+            if (v.view_count or 0) >= 5500:
+                client_rev += 5500
+        elif price > 0:
+            client_rev += price
+
+    media_rev = sum(r.sponsor_fee or 0 for r in DidiMedia.query.all())
+    speech_rev = sum(r.speaker_fee or 0 for r in DidiSpeech.query.all())
+    software_rev = sum((r.monthly_fee or 0) * (r.months or 0) for r in DidiSoftware.query.all())
+    didi_rev = media_rev + speech_rev + software_rev
+
+    return client_rev + didi_rev
+
+
+def get_urgent_videos():
+    """Videos due for upload within 3 days that aren't done yet."""
+    today = datetime.now(TZ_TW).date()
+    deadline = (today + timedelta(days=3)).isoformat()
+    today_str = today.isoformat()
+    return Video.query.filter(
+        Video.status.notin_(['已完成', '已上傳雲端', '已上傳影片']),
+        Video.upload_date <= deadline,
+        Video.upload_date >= today_str,
+    ).order_by(Video.upload_date.asc()).all()
+
+
+def build_daily_update():
+    today = datetime.now(TZ_TW).date()
+    year_end = date(today.year, 12, 31)
+    days_left = (year_end - today).days or 1
+
+    urgent = get_urgent_videos()
+    total_rev = calc_total_revenue()
+    remaining = REVENUE_TARGET - total_rev
+    daily_needed = remaining / days_left if remaining > 0 else 0
+
+    lines = [f"📊 每日戰情更新（{today.isoformat()}）", "─" * 20, ""]
+
+    lines.append(f"🎬 三天內要上傳但還沒好的影片：{len(urgent)} 支")
+    if urgent:
+        for v in urgent:
+            lines.append(f"  • {v.client_name}｜{v.video_id}｜上片日 {v.upload_date}｜{v.status}")
+    lines.append("")
+
+    lines.append(f"💰 年度目標：${REVENUE_TARGET:,.0f}")
+    lines.append(f"💵 目前收入：${total_rev:,.0f}")
+    if remaining > 0:
+        lines.append(f"📉 還差：${remaining:,.0f}")
+        lines.append(f"⏱ 剩餘 {days_left} 天，平均每天需賺 ${daily_needed:,.0f}")
+    else:
+        lines.append(f"🎉 已達標！超出 ${-remaining:,.0f}")
+
+    return "\n".join(lines)
+
+
+def scheduled_daily_update():
+    with app.app_context():
+        msg = build_daily_update()
+        ok = send_line_push(msg)
+        print(f"[Scheduler] Daily update sent, success={ok}")
+
+
 def scheduled_overdue_check():
     with app.app_context():
         items = get_overdue_items()
@@ -624,122 +701,34 @@ def reply_line(reply_token, text):
 
 
 def handle_line_command(reply_token, text):
+    """Respond to any message with the daily update."""
     text = text.strip()
-    cmd = text.split()
-
-    if text in ("指令", "help", "選單", "幫助"):
-        reply_line(reply_token, (
-            "📋 可用指令：\n\n"
-            "【列表】查看所有進行中任務\n"
-            "【逾期】查看逾期任務\n"
-            "【查詢 影片編號】查看特定任務\n"
-            "【改狀態 影片編號 新狀態】\n"
-            "  狀態：待分配／剪輯中／初稿修改中／客戶確認中／已完成／已上傳雲端／已上傳影片\n"
-            "【改備註 影片編號 內容】\n"
-            "【客戶列表】\n"
-            "【人員列表】\n"
-            "【加客戶 名稱】\n"
-            "【加人員 名稱】"
-        ))
-
-    elif text == "列表":
-        rows = Video.query.filter(
-            Video.status.notin_(['已完成', '已上傳雲端', '已上傳影片'])
-        ).order_by(Video.draft_date.asc()).all()
-        if not rows:
-            reply_line(reply_token, "目前沒有進行中的任務 👍")
-        else:
-            msg = f"📋 進行中任務（{len(rows)} 筆）\n{'─' * 18}\n\n"
-            for i, r in enumerate(rows, 1):
-                msg += f"{i}. {r.client_name}｜{r.video_id}\n   {r.topic}｜{r.editor}｜{r.status}\n   初稿：{r.draft_date}\n\n"
-            reply_line(reply_token, msg)
-
+    if text in ("戰情", "更新", "報告", "status"):
+        msg = build_daily_update()
+        reply_line(reply_token, msg)
     elif text == "逾期":
         items = get_overdue_items()
         if not items:
             reply_line(reply_token, "目前沒有逾期任務 👍")
         else:
             reply_line(reply_token, build_overdue_message(items))
-
-    elif len(cmd) >= 2 and cmd[0] == "查詢":
-        vid = cmd[1]
-        r = Video.query.filter_by(video_id=vid).first()
-        if not r:
-            reply_line(reply_token, f"找不到編號「{vid}」的影片。")
-        else:
-            reply_line(reply_token, (
-                f"📎 {r.client_name}｜{r.video_id}\n"
-                f"主題：{r.topic}\n"
-                f"狀態：{r.status}\n"
-                f"剪輯：{r.editor}\n"
-                f"初稿日：{r.draft_date}\n"
-                f"上片日：{r.upload_date}\n"
-                f"素材：{r.material_link or '無'}\n"
-                f"腳本：{r.script_link or '無'}\n"
-                f"注意：{r.notes or '無'}\n"
-                f"備註：{r.remarks or '無'}"
-            ))
-
-    elif len(cmd) >= 3 and cmd[0] == "改狀態":
-        vid, new_status = cmd[1], cmd[2]
-        if new_status not in STATUSES:
-            reply_line(reply_token, f"無效狀態。可用：{'／'.join(STATUSES)}")
-        else:
-            r = Video.query.filter_by(video_id=vid).first()
-            if not r:
-                reply_line(reply_token, f"找不到編號「{vid}」的影片。")
-            else:
-                r.status = new_status
-                r.updated_at = datetime.now().isoformat()
-                db.session.commit()
-                reply_line(reply_token, f"✅ 已將「{vid}」狀態改為「{new_status}」")
-
-    elif len(cmd) >= 3 and cmd[0] == "改備註":
-        vid = cmd[1]
-        new_remark = " ".join(cmd[2:])
-        r = Video.query.filter_by(video_id=vid).first()
-        if not r:
-            reply_line(reply_token, f"找不到編號「{vid}」的影片。")
-        else:
-            r.remarks = new_remark
-            r.updated_at = datetime.now().isoformat()
-            db.session.commit()
-            reply_line(reply_token, f"✅ 已更新「{vid}」的備註為：{new_remark}")
-
-    elif text == "客戶列表":
-        names = [c.name for c in Client.query.order_by(Client.id).all()]
-        reply_line(reply_token, "📂 客戶列表：\n" + "\n".join(f"  • {n}" for n in names) if names else "目前沒有客戶。")
-
-    elif text == "人員列表":
-        names = [e.name for e in Editor.query.order_by(Editor.id).all()]
-        reply_line(reply_token, "👥 人員列表：\n" + "\n".join(f"  • {n}" for n in names) if names else "目前沒有人員。")
-
-    elif len(cmd) >= 2 and cmd[0] == "加客戶":
-        name = " ".join(cmd[1:])
-        if Client.query.filter_by(name=name).first():
-            reply_line(reply_token, f"客戶「{name}」已存在。")
-        else:
-            db.session.add(Client(name=name))
-            db.session.commit()
-            reply_line(reply_token, f"✅ 已新增客戶「{name}」")
-
-    elif len(cmd) >= 2 and cmd[0] == "加人員":
-        name = " ".join(cmd[1:])
-        if Editor.query.filter_by(name=name).first():
-            reply_line(reply_token, f"人員「{name}」已存在。")
-        else:
-            db.session.add(Editor(name=name))
-            db.session.commit()
-            reply_line(reply_token, f"✅ 已新增人員「{name}」")
-
     else:
-        reply_line(reply_token, "我不太理解這個指令 😅\n回覆「指令」查看所有可用操作。")
+        msg = build_daily_update()
+        reply_line(reply_token, msg)
 
 @app.route("/api/line-test", methods=["POST"])
 def api_line_test():
     """Send a test message to verify LINE API connectivity."""
     ok = send_line_push("LINE 機器人連線測試成功！")
     return jsonify({"success": ok})
+
+
+@app.route("/api/daily-update", methods=["POST"])
+def api_daily_update():
+    """Manually trigger the daily LINE update."""
+    msg = build_daily_update()
+    ok = send_line_push(msg)
+    return jsonify({"success": ok, "message": msg})
 
 
 # ── Startup ──
@@ -780,12 +769,13 @@ with app.app_context():
 
 
 # Scheduler — runs in both gunicorn and standalone mode
-_scheduler = BackgroundScheduler()
+_scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 _check_hour = int(os.getenv("CHECK_HOUR", "9"))
 _check_minute = int(os.getenv("CHECK_MINUTE", "0"))
 _scheduler.add_job(scheduled_overdue_check, "cron", hour=_check_hour, minute=_check_minute)
+_scheduler.add_job(scheduled_daily_update, "cron", hour=_check_hour, minute=_check_minute + 1)
 _scheduler.start()
-print(f"[Scheduler] Daily overdue check at {_check_hour:02d}:{_check_minute:02d}")
+print(f"[Scheduler] Daily overdue check at {_check_hour:02d}:{_check_minute:02d}, daily update at {_check_hour:02d}:{_check_minute + 1:02d}")
 
 
 if __name__ == "__main__":
