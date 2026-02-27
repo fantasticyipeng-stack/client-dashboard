@@ -3,3 +3,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+venv/
+cron.log
+threads_posts.json
+threads_posts.md
