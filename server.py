@@ -684,6 +684,7 @@ def handle_line_command(reply_token, text):
 if line_handler:
     @line_handler.add(MessageEvent, message=TextMessageContent)
     def on_message(event):
+        print(f"[LINE] on_message triggered: {event.message.text}")
         handle_line_command(event.reply_token, event.message.text)
 
     @line_handler.add(FollowEvent)
