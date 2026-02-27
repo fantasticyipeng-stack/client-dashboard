@@ -6,13 +6,10 @@ from flask import Flask, request, jsonify, send_file, abort
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
-from linebot.v3 import WebhookHandler
-from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.messaging import (
     Configuration, ApiClient, MessagingApi,
     PushMessageRequest, ReplyMessageRequest, TextMessage,
 )
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, FollowEvent, JoinEvent
 from apscheduler.schedulers.background import BackgroundScheduler
 
 load_dotenv()
@@ -38,10 +35,8 @@ db = SQLAlchemy(app)
 
 # ── LINE Bot ──
 
-line_handler = None
 line_api = None
-if LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN:
-    line_handler = WebhookHandler(LINE_CHANNEL_SECRET)
+if LINE_CHANNEL_ACCESS_TOKEN:
     _cfg = Configuration(access_token=LINE_CHANNEL_ACCESS_TOKEN)
     _api_client = ApiClient(_cfg)
     line_api = MessagingApi(_api_client)
@@ -538,27 +533,54 @@ def api_check_overdue():
 
 # ── LINE Webhook ──
 
+import json as _json
+import hashlib, hmac, base64
+
+def verify_signature(body, signature):
+    """Manually verify LINE webhook signature."""
+    if not LINE_CHANNEL_SECRET:
+        return False
+    gen = hmac.new(LINE_CHANNEL_SECRET.encode(), body.encode(), hashlib.sha256).digest()
+    return signature == base64.b64encode(gen).decode()
+
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
         return "OK", 200
-    if not line_handler:
-        print("[Webhook] line_handler not initialized — check LINE env vars")
-        return "LINE not configured", 200
+    if not line_api:
+        print("[Webhook] line_api not initialized — check LINE env vars")
+        return "OK", 200
     signature = request.headers.get("X-Line-Signature", "")
     body = request.get_data(as_text=True)
     print(f"[Webhook] Received event, body length={len(body)}")
-    try:
-        line_handler.handle(body, signature)
-    except InvalidSignatureError:
+    if not verify_signature(body, signature):
         print("[Webhook] Invalid signature")
-        abort(400)
+        return "OK", 200
+    try:
+        data = _json.loads(body)
+        for event in data.get("events", []):
+            etype = event.get("type")
+            reply_token = event.get("replyToken")
+            if etype == "message" and event.get("message", {}).get("type") == "text":
+                text = event["message"]["text"]
+                print(f"[LINE] Message received: {text}")
+                handle_line_command(reply_token, text)
+            elif etype == "follow":
+                uid = event.get("source", {}).get("userId", "unknown")
+                print(f"[LINE] User followed: {uid}")
+                reply_line(reply_token, f"歡迎使用短影片管理機器人！👋\n\n你的 User ID：\n{uid}\n\n回覆「指令」查看所有操作。")
+            elif etype == "join":
+                gid = event.get("source", {}).get("groupId", "unknown")
+                print(f"[LINE] Joined group: {gid}")
+                reply_line(reply_token, f"已加入群組！📋\n\n群組 ID：\n{gid}\n\n請將此 ID 設為 LINE_TARGET_ID。\n回覆「指令」查看所有操作。")
     except Exception as e:
-        print(f"[Webhook] Error: {e}")
+        print(f"[Webhook] Error processing event: {e}")
     return "OK", 200
 
 
 def reply_line(reply_token, text):
+    if not line_api:
+        return
     try:
         line_api.reply_message(ReplyMessageRequest(
             reply_token=reply_token,
@@ -681,25 +703,6 @@ def handle_line_command(reply_token, text):
         reply_line(reply_token, "我不太理解這個指令 😅\n回覆「指令」查看所有可用操作。")
 
 
-if line_handler:
-    @line_handler.add(MessageEvent, message=TextMessageContent)
-    def on_message(event):
-        print(f"[LINE] on_message triggered: {event.message.text}")
-        handle_line_command(event.reply_token, event.message.text)
-
-    @line_handler.add(FollowEvent)
-    def on_follow(event):
-        uid = event.source.user_id
-        print(f"[LINE] User followed: {uid}")
-        reply_line(event.reply_token,
-                   f"歡迎使用短影片管理機器人！👋\n\n你的 User ID：\n{uid}\n\n回覆「指令」查看所有操作。")
-
-    @line_handler.add(JoinEvent)
-    def on_join(event):
-        gid = getattr(event.source, "group_id", "unknown")
-        print(f"[LINE] Joined group: {gid}")
-        reply_line(event.reply_token,
-                   f"已加入群組！📋\n\n群組 ID：\n{gid}\n\n請將此 ID 設為 LINE_TARGET_ID。\n回覆「指令」查看所有操作。")
 
 
 # ── Startup ──
