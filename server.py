@@ -97,6 +97,7 @@ class ClientProfile(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     current_followers = db.Column(db.Integer, default=0)
     target_followers = db.Column(db.Integer, default=0)
+    budget_per_video = db.Column(db.Integer, default=0)
     reminders = db.Column(db.Text, default="")
     social_ig = db.Column(db.Text, default="")
     social_threads = db.Column(db.Text, default="")
@@ -109,6 +110,7 @@ class ClientProfile(db.Model):
         return {
             "current_followers": self.current_followers,
             "target_followers": self.target_followers,
+            "budget_per_video": self.budget_per_video,
             "reminders": self.reminders,
             "social_ig": self.social_ig or "",
             "social_threads": self.social_threads or "",
@@ -340,6 +342,7 @@ def save_client_profile():
         db.session.add(row)
     row.current_followers = d.get("current_followers", 0)
     row.target_followers = d.get("target_followers", 0)
+    row.budget_per_video = d.get("budget_per_video", 0)
     row.reminders = d.get("reminders", "")
     row.social_ig = d.get("social_ig", "")
     row.social_threads = d.get("social_threads", "")
@@ -526,10 +529,14 @@ REVENUE_TARGET = 5000000
 
 
 def calc_total_revenue():
-    """Calculate total revenue matching dashboard logic."""
+    """Calculate total revenue: prefer client profile budget_per_video, else CLIENT_PRICES."""
     client_rev = 0
     uploaded = Video.query.filter_by(status='已上傳影片').all()
     for v in uploaded:
+        profile = ClientProfile.query.filter_by(name=v.client_name).first()
+        if profile and (profile.budget_per_video or 0) > 0:
+            client_rev += profile.budget_per_video
+            continue
         price = CLIENT_PRICES.get(v.client_name, 0)
         if price == -1:
             if (v.view_count or 0) >= 5500:
@@ -764,6 +771,8 @@ def migrate_db():
             for col in social_cols:
                 if col not in cols:
                     db.session.execute(text(f"ALTER TABLE client_profiles ADD COLUMN {col} TEXT DEFAULT ''"))
+            if "budget_per_video" not in cols:
+                db.session.execute(text("ALTER TABLE client_profiles ADD COLUMN budget_per_video INTEGER DEFAULT 0"))
             db.session.commit()
     except Exception as e:
         db.session.rollback()
