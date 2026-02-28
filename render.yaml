@@ -24,7 +24,7 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: ALLOWED_EMAILS
-        sync: false
+        value: "tolink@tolink.com.tw,yp.fan@tolink.com.tw,fantasticyipeng@gmail.com,william.sh.yeh@tolink.com.tw"
       - key: LINE_CHANNEL_SECRET
         sync: false
       - key: LINE_CHANNEL_ACCESS_TOKEN

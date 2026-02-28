@@ -57,9 +57,12 @@ db = SQLAlchemy(app)
 
 
 def _email_allowed(email):
+    """僅允許在 ALLOWED_EMAILS 或 ALLOWED_DOMAIN 內的帳號；未設定任何名單時不開放。"""
     if not email:
         return False
     email = email.strip().lower()
+    if not ALLOWED_EMAILS and not ALLOWED_DOMAIN:
+        return False
     if ALLOWED_EMAILS and email not in ALLOWED_EMAILS:
         return False
     if ALLOWED_DOMAIN and not email.endswith("@" + ALLOWED_DOMAIN):
@@ -383,7 +386,16 @@ def auth_callback():
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("login_page") if AUTH_ENABLED else url_for("index"))
+    resp = redirect(url_for("login_page") if AUTH_ENABLED else url_for("index"))
+    # 刪除 session cookie，瀏覽器才會真正登出
+    cookie_name = app.config.get("SESSION_COOKIE_NAME", "session")
+    resp.delete_cookie(
+        cookie_name,
+        path=app.config.get("SESSION_COOKIE_PATH", "/"),
+        secure=app.config.get("SESSION_COOKIE_SECURE", False),
+        samesite=app.config.get("SESSION_COOKIE_SAMESITE", "Lax"),
+    )
+    return resp
 
 
 @app.before_request

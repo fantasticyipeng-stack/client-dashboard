@@ -9,11 +9,11 @@
 | `GOOGLE_CLIENT_ID` | 啟用時必填 | Google OAuth 2.0 用戶端 ID |
 | `GOOGLE_CLIENT_SECRET` | 啟用時必填 | Google OAuth 2.0 用戶端密鑰 |
 | `SESSION_SECRET_KEY` | 啟用時必填 | 任意長字串，用來簽署 session cookie（建議 32 字元以上） |
-| `ALLOWED_EMAILS` | 選填 | 允許的 Gmail，逗號分隔，例如：`a@gmail.com,b@gmail.com` |
-| `ALLOWED_DOMAIN` | 選填 | 允許的網域，例如：`company.com` 表示允許 `*@company.com` |
+| `ALLOWED_EMAILS` | 啟用時必填其一 | 允許的 Gmail，逗號分隔，例如：`a@gmail.com,b@gmail.com` |
+| `ALLOWED_DOMAIN` | 啟用時必填其一 | 允許的網域，例如：`company.com` 表示允許 `*@company.com` |
 
 - **若未設定** `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`：不啟用登入，網站維持誰都能開。
-- **若只設定 Google + SESSION_SECRET_KEY，不設 ALLOWED_EMAILS / ALLOWED_DOMAIN**：任何 Google 帳號都可登入（方便先測試）。
+- **啟用登入後**：必須設定 `ALLOWED_EMAILS` 或 `ALLOWED_DOMAIN` 至少一個，否則**不開放任何 Google 帳號**登入（僅指定帳號可 access）。
 
 ## 2. 取得 Google OAuth 憑證
 
@@ -29,4 +29,4 @@
 
 - 未登入訪問首頁或任一 `/api/*` → 導向登入頁或回傳 401。
 - `/webhook`（LINE）、`/api/line-test`、`/api/daily-update` 不檢查登入（給 LINE 與排程用）。
-- 登入後會以 cookie 維持 session，右上有 **登出** 可清除。
+- 登入後會以 cookie 維持 session，右上有 **登出** 可真正清除並回到登入頁。
