@@ -416,6 +416,7 @@ def require_login():
 
 @app.route("/")
 def index():
+    """未登入不送 dashboard 頁面，直接導向登入。"""
     if AUTH_ENABLED and not session.get("email"):
         return redirect(url_for("login_page"))
     return send_file("dashboard.html")

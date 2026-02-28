@@ -10,7 +10,7 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
+    startCommand: gunicorn server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1 -c gunicorn_conf.py
     healthCheckPath: /health
     envVars:
       - key: DATABASE_URL
