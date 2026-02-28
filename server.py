@@ -486,6 +486,16 @@ def unarchive_editor(eid):
     return jsonify({"message": "unarchived"})
 
 
+@app.route("/api/editors/<int:eid>/delete_permanent", methods=["POST", "DELETE"])
+def delete_editor_permanent(eid):
+    e = Editor.query.get(eid)
+    if not e:
+        abort(404)
+    db.session.delete(e)
+    db.session.commit()
+    return jsonify({"message": "deleted"})
+
+
 # ── API: Staff (負責業務/PM 名單) ──
 
 DEFAULT_STAFF_NAMES = ["范以芃", "葉思宏"]

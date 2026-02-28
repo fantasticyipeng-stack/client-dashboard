@@ -106,7 +106,7 @@ tbody tr:last-child td { border-bottom: none; }
 .status-剪輯中 { background: #dbeafe; color: #1e40af; }
 .status-初稿修改中 { background: #ffedd5; color: #9a3412; }
 .status-客戶確認中 { background: #ede9fe; color: #5b21b6; }
-.status-已完成 { background: #d1fae5; color: #065f46; }
+.status-已完成, .status-客戶確認完成 { background: #d1fae5; color: #065f46; }
 .status-已上傳雲端 { background: #cffafe; color: #155e75; }
 .status-已上傳影片 { background: #f0fdf4; color: #14532d; }
 /* 五階段圓圈：準備、初剪、優化、排程、上片；文字在圓圈下方，右側顯示狀態 */
@@ -174,12 +174,19 @@ textarea { resize: vertical; min-height: 50px; }
 .profile-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; overflow: hidden; }
 .profile-card.client-card-clickable { cursor: pointer; }
 .profile-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
-.profile-card h3 > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-card h3 > span:first-child { min-width: 0; flex: 1 1 auto; word-break: break-word; }
 .profile-card h3 .client-budget-wrap { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
-.client-budget-input { width: 56px; font-size: 12px; color: var(--text2); padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; }
+.client-budget-input { width: 52px; font-size: 12px; color: var(--text2); padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; }
 .client-budget-input:focus { border-color: var(--primary); color: var(--text); outline: none; }
 .profile-card h3 .client-budget-unit { font-size: 12px; font-weight: 400; color: var(--text2); white-space: nowrap; }
-.profile-card h3 .client-delete-btn { margin-left: auto; flex-shrink: 0; }
+.profile-card h3 .client-delete-btn { flex-shrink: 0; }
+.profile-card h3 .client-h3-right { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.client-stats-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 16px; margin-bottom: 12px; }
+.client-stats-row .client-stat-item { display: flex; flex-direction: column; gap: 2px; }
+.client-stats-row .client-stat-val { font-size: 18px; font-weight: 700; }
+.client-stats-row .client-stat-val.primary { color: var(--primary); }
+.client-stats-row .client-stat-val.success { color: var(--success); }
+.client-stats-row .client-detail-btn { margin-left: auto; }
 .profile-field { margin-bottom: 12px; }
 .profile-field label { display: block; font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
 .profile-field input, .profile-field select, .profile-field textarea { font-size: 13px; padding: 7px 10px; }
@@ -304,9 +311,10 @@ textarea { resize: vertical; min-height: 50px; }
   .bottom-nav a.active .bnav-icon { color: #a5b4fc; }
 
   .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 8px 10px; }
-  .stat-card { padding: 10px 12px; }
-  .stat-card .value { font-size: 20px; }
-  .stat-card .label { font-size: 11px; }
+  .stat-card { padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: nowrap; }
+  .stat-card .label { font-size: 11px; margin-bottom: 0; flex-shrink: 0; }
+  .stat-card .value { font-size: 18px; }
+  .stat-card .label + .value { margin-left: auto; }
 
   .toolbar { padding: 0 10px 10px; gap: 6px; }
   .search-box { flex: 1 1 100%; min-width: 0; }
@@ -314,16 +322,16 @@ textarea { resize: vertical; min-height: 50px; }
   .ms-btn { font-size: 12px; padding: 7px 8px; }
 
   .table-wrapper { padding: 0 10px 16px; }
-  .table-container { -webkit-overflow-scrolling: touch; overflow-x: auto; max-width: 100%; }
-  table { min-width: 0; width: 100%; table-layout: fixed; }
-  table thead th:nth-child(1), table tbody td:nth-child(1) { width: 14%; }
-  table thead th:nth-child(2), table tbody td:nth-child(2) { width: 8%; }
-  table thead th:nth-child(3), table tbody td:nth-child(3) { width: 18%; }
-  table thead th:nth-child(4), table tbody td:nth-child(4) { width: 18%; }
-  table thead th:nth-child(5), table tbody td:nth-child(5) { width: 10%; }
-  table thead th:nth-child(6), table tbody td:nth-child(6) { width: 10%; }
-  table thead th:nth-child(7), table tbody td:nth-child(7) { width: 12%; }
-  table thead th:nth-child(8), table tbody td:nth-child(8) { width: 10%; }
+  .table-container { -webkit-overflow-scrolling: touch; overflow-x: auto; overflow-y: visible; max-width: 100%; }
+  .table-container table { min-width: 720px; width: 100%; table-layout: auto; }
+  table thead th:nth-child(1), table tbody td:nth-child(1) { min-width: 70px; }
+  table thead th:nth-child(2), table tbody td:nth-child(2) { min-width: 50px; }
+  table thead th:nth-child(3), table tbody td:nth-child(3) { min-width: 80px; }
+  table thead th:nth-child(4), table tbody td:nth-child(4) { min-width: 120px; }
+  table thead th:nth-child(5), table tbody td:nth-child(5) { min-width: 70px; }
+  table thead th:nth-child(6), table tbody td:nth-child(6) { min-width: 70px; }
+  table thead th:nth-child(7), table tbody td:nth-child(7) { min-width: 70px; }
+  table thead th:nth-child(8), table tbody td:nth-child(8) { min-width: 80px; }
   thead th { padding: 6px 4px; font-size: 10px; }
   tbody td { padding: 6px 4px; font-size: 11px; }
   .note-cell { max-width: 60px; }
@@ -493,7 +501,7 @@ textarea { resize: vertical; min-height: 50px; }
               <option value="">請選擇狀態</option>
               <option value="待分配">待分配</option><option value="剪輯中">剪輯中</option>
               <option value="初稿修改中">初稿修改中</option><option value="客戶確認中">客戶確認中</option>
-              <option value="已完成">已完成</option><option value="已上傳雲端">已上傳雲端</option><option value="已上傳影片">已上傳影片</option>
+              <option value="已完成">客戶確認完成</option><option value="已上傳雲端">已上傳雲端</option><option value="已上傳影片">已上傳影片</option>
             </select>
           </div>
         </div>
@@ -706,6 +714,7 @@ function genId(){return Date.now().toString(36)+Math.random().toString(36).slice
 function fmtMoney(n){return n.toLocaleString('zh-TW');}
 function fmtNum(n){return (parseInt(n,10)||0).toLocaleString('zh-TW');}
 
+function statusDisplay(s){ return s==='已完成'?'客戶確認完成':(s||''); }
 function statusToStep(s){
   if(s==='待分配')return 0;
   if(s==='剪輯中'||s==='初稿修改中')return 1;
@@ -726,7 +735,7 @@ function renderStatusPipeline(status){
     labelsHtml+='<span>'+STATUS_STEP_LABELS[i]+'</span>';
   }
   const badgeClass='status-badge status-'+status.replace(/\s/g,'');
-  return '<span class="status-pipeline-wrap" title="'+esc(status)+'"><span class="status-pipeline"><span class="steps-row">'+stepsHtml+'</span><span class="labels-row">'+labelsHtml+'</span></span><span class="'+badgeClass+'">'+esc(status)+'</span></span>';
+  return '<span class="status-pipeline-wrap" title="'+esc(statusDisplay(status))+'"><span class="status-pipeline"><span class="steps-row">'+stepsHtml+'</span><span class="labels-row">'+labelsHtml+'</span></span><span class="'+badgeClass+'">'+esc(statusDisplay(status))+'</span></span>';
 }
 
 // ── Page switching ──
@@ -822,7 +831,10 @@ function getSelectedValues(did){
   return new Set(checked.map(cb=>cb.value));
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.ms-wrap'))document.querySelectorAll('.ms-drop.open').forEach(d=>d.classList.remove('open'));});
-document.getElementById('editorProfileGrid')&&document.getElementById('editorProfileGrid').addEventListener('click',e=>{const btn=e.target.closest('.editor-archive-btn');if(!btn)return;const name=btn.getAttribute('data-editor-name');if(!name)return;if(btn.getAttribute('data-action')==='archive')archiveEditor(name);else unarchiveEditor(name);});
+document.getElementById('editorProfileGrid')&&document.getElementById('editorProfileGrid').addEventListener('click',e=>{
+  const archiveBtn=e.target.closest('.editor-archive-btn');if(archiveBtn){const name=archiveBtn.getAttribute('data-editor-name');if(name){if(archiveBtn.getAttribute('data-action')==='archive')archiveEditor(name);else unarchiveEditor(name);}return;}
+  const delBtn=e.target.closest('.editor-delete-btn');if(delBtn){const name=delBtn.getAttribute('data-editor-name');if(name)confirmDeleteEditorPermanent(name);}
+});
 document.getElementById('clientProfileGrid')&&document.getElementById('clientProfileGrid').addEventListener('click',e=>{
   const card=e.target.closest('.client-card-clickable');if(!card)return;
   if(e.target.closest('button')||e.target.closest('input')||e.target.closest('select')||e.target.closest('textarea'))return;
@@ -1066,7 +1078,7 @@ function viewDetail(id){
   const lnk=(u,t)=>u?`<a href="${esc(u)}" target="_blank">${t}</a>`:'-';
   const fields=[
     ['客戶名稱',esc(d.client_name)],['影片編號',esc(d.video_id)],['影片主題',esc(d.topic)],
-    ['狀態',`<span class="status-badge status-${d.status}">${d.status}</span>`],
+    ['狀態',`<span class="status-badge status-${(d.status||'').replace(/\s/g,'')}">${esc(statusDisplay(d.status))}</span>`],
     ['初稿繳交',fmtDate(d.draft_date)],['預計上片',fmtDate(d.upload_date)],['剪輯人員',esc(d.editor)],
     ['素材連結',lnk(d.material_link,'開啟連結')],['參考腳本',lnk(d.script_link,'開啟連結')],
     ['觀看數', fmtNum(d.view_count)||'0'],
@@ -1198,14 +1210,16 @@ function renderClientProfiles(){
         <input type="url" value="${esc(p[key]||'')}" placeholder="https://..." onchange="onClientFieldChange('${esc(name)}','${key}',this.value)" style="font-size:12px;padding:5px 8px">
       </div>`).join('');
     const archiveBadge=archiveReason?`<span class="status-badge" style="background:#e2e8f0;color:var(--text2);margin-left:4px">${esc(archiveReason)}</span>`:'';
-    const archiveBtn=archiveReason?`<button class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();unarchiveClient('${esc(name)}')">取消典藏</button>`:`<button class="btn btn-outline btn-sm client-delete-btn" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();openArchiveClientModal('${esc(name)}')">典藏</button>`;
-    const statsBlock=`<div class="profile-row" style="margin-bottom:10px;gap:12px">
-      <div class="profile-field" style="margin-bottom:0"><label>總上傳影片數</label><div style="font-size:18px;font-weight:700;color:var(--primary)">${clientVideos.length} 支</div></div>
-      <div class="profile-field" style="margin-bottom:0"><label>總觀看數</label><div style="font-size:18px;font-weight:700;color:var(--success)">${fmtNum(totalViewsSum)}</div></div>
-    </div>
-    <button type="button" class="btn btn-outline btn-sm client-detail-btn" data-client-name="${esc(name)}">影片成效與提醒</button>`;
+    const archiveBtn=archiveReason
+      ?`<span class="client-h3-right"><button class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();unarchiveClient('${esc(name)}')">取消典藏</button><button class="btn btn-danger btn-sm" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();confirmDeleteClient('${esc(name)}')">刪除</button></span>`
+      :`<span class="client-h3-right"><span class="client-budget-wrap"><input type="number" class="client-budget-input" min="0" value="${p.budget_per_video||0}" placeholder="0" onclick="event.stopPropagation()" onchange="onClientFieldChange('${esc(name)}','budget_per_video',this.value)" title="每部金額"><span class="client-budget-unit">元/支</span></span><button class="btn btn-outline btn-sm client-delete-btn" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();openArchiveClientModal('${esc(name)}')">典藏</button></span>`;
+    const statsBlock=`<div class="client-stats-row">
+      <div class="client-stat-item"><label>總上傳影片數</label><span class="client-stat-val primary">${clientVideos.length} 支</span></div>
+      <div class="client-stat-item"><label>總觀看數</label><span class="client-stat-val success">${fmtNum(totalViewsSum)}</span></div>
+      <button type="button" class="btn btn-primary btn-sm client-detail-btn" data-client-name="${esc(name)}">影片成效與提醒</button>
+    </div>`;
     return`<div class="profile-card client-card-clickable" data-client-name="${esc(name)}">
-      <h3><span>${esc(name)}</span>${archiveBadge}<span class="client-budget-wrap"><input type="number" class="client-budget-input" min="0" value="${p.budget_per_video||0}" placeholder="0" onclick="event.stopPropagation()" onchange="onClientFieldChange('${esc(name)}','budget_per_video',this.value)" title="每部金額"><span class="client-budget-unit">元/支</span></span>${archiveBtn}</h3>
+      <h3><span>${esc(name)}</span>${archiveBadge}${archiveBtn}</h3>
       ${statsBlock}
       <div class="profile-row">
         <div class="profile-field"><label>目前粉絲數</label><input type="number" value="${p.current_followers||0}" min="0" onclick="event.stopPropagation()" onchange="onClientFieldChange('${esc(name)}','current_followers',this.value)"></div>
@@ -1271,9 +1285,9 @@ function confirmDeleteClient(name){
   pendingDeleteId=null;
   document.getElementById('confirmMsg').textContent=`確定要刪除客戶「${name}」嗎？此操作無法復原。`;
   window._confirmCb=async()=>{
-    const c=clients.find(x=>x.name===name);
+    const c=[...clients,...archivedClients].find(x=>x.name===name);
     if(serverMode&&c){await apiCall(`/api/clients/${c.id}`,{method:'DELETE'});}
-    else{clients=clients.filter(x=>x.name!==name);lsSave(LS_CLIENTS,clients);}
+    else{const all=lsLoad(LS_CLIENTS,[]);const filtered=all.filter(x=>x.name!==name);lsSave(LS_CLIENTS,filtered);}
     toast(`已刪除客戶「${name}」`);await loadAll();renderClientProfiles();
   };
   document.getElementById('confirmModal').classList.add('active');
@@ -1312,6 +1326,16 @@ function confirmDeleteEditor(name){
     if(serverMode&&e){await apiCall(`/api/editors/${e.id}`,{method:'DELETE'});}
     else{editors=editors.filter(x=>x.name!==name);lsSave(LS_EDITORS,editors);}
     toast(`已刪除人員「${name}」`);await loadAll();renderEditorProfiles();
+  };
+  document.getElementById('confirmModal').classList.add('active');
+}
+function confirmDeleteEditorPermanent(name){
+  document.getElementById('confirmMsg').textContent=`確定要永久刪除剪輯人員「${name}」嗎？此操作無法復原。`;
+  window._confirmCb=async()=>{
+    const e=[...editors,...archivedEditors].find(x=>x.name===name);
+    if(serverMode&&e){await apiCall(`/api/editors/${e.id}/delete_permanent`,{method:'POST'});}
+    else{const all=lsLoad(LS_EDITORS,[]);const filtered=all.filter(x=>x.name!==name);lsSave(LS_EDITORS,filtered);}
+    toast(`已刪除人員「${name}」`);await loadAll();populateDropdowns();buildMultiSelect('msEditorDrop',editors.map(x=>x.name),'msEditorCount');renderEditorProfiles();
   };
   document.getElementById('confirmModal').classList.add('active');
 }
@@ -1433,7 +1457,7 @@ function renderEditorProfiles(){
       <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${esc(ed.name)} <span class="work-status-badge ws-${ws}">${ws}</span>
         <span style="font-size:12px;font-weight:400;color:var(--text2)">進行中: ${assignedVideos} 支</span>
         <span style="font-size:12px;font-weight:400;color:var(--success)">總完成: ${totalCompleted} 支</span>
-        ${ed.archived?`<button type="button" class="btn btn-outline btn-sm editor-archive-btn" style="margin-left:auto;font-size:11px;padding:3px 8px" data-editor-name="${esc(ed.name)}" data-action="unarchive">取消典藏</button>`:`<button type="button" class="btn btn-outline btn-sm editor-archive-btn" style="margin-left:auto;font-size:11px;padding:3px 8px" data-editor-name="${esc(ed.name)}" data-action="archive">典藏</button>`}</h3>
+        ${ed.archived?`<span style="margin-left:auto;display:inline-flex;gap:6px"><button type="button" class="btn btn-outline btn-sm editor-archive-btn" style="font-size:11px;padding:3px 8px" data-editor-name="${esc(ed.name)}" data-action="unarchive">取消典藏</button><button type="button" class="btn btn-danger btn-sm editor-delete-btn" style="font-size:11px;padding:3px 8px" data-editor-name="${esc(ed.name)}">刪除</button></span>`:`<button type="button" class="btn btn-outline btn-sm editor-archive-btn" style="margin-left:auto;font-size:11px;padding:3px 8px" data-editor-name="${esc(ed.name)}" data-action="archive">典藏</button>`}</h3>
       <div class="profile-row">
         <div class="profile-field"><label>工作狀態</label>
           <select onchange="onEditorFieldChange('${esc(ed.name)}','work_status',this.value);renderEditorProfiles()">
