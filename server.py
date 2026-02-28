@@ -261,13 +261,18 @@ class DidiSoftware(db.Model):
 
 
 def seed_defaults():
-    for name in DEFAULT_CLIENTS:
-        if not Client.query.filter_by(name=name).first():
+    """僅在資料庫為空時寫入預設客戶與剪輯；避免每次啟動都跑大量查詢。"""
+    try:
+        if Client.query.limit(1).first() is not None:
+            return
+        for name in DEFAULT_CLIENTS:
             db.session.add(Client(name=name))
-    for name in DEFAULT_EDITORS:
-        if not Editor.query.filter_by(name=name).first():
+        for name in DEFAULT_EDITORS:
             db.session.add(Editor(name=name))
-    db.session.commit()
+        db.session.commit()
+    except Exception as e:
+        db.session.rollback()
+        print(f"[seed_defaults] {e}")
 
 
 # ── API: Serve frontend ──
@@ -386,7 +391,7 @@ def require_login():
     path = request.path
     if not AUTH_ENABLED:
         return None
-    if path in ("/login", "/logout") or path.startswith("/auth/") or path == "/logo.png":
+    if path in ("/health", "/login", "/logout") or path.startswith("/auth/") or path == "/logo.png":
         return None
     if path == "/webhook":
         return None
@@ -407,6 +412,12 @@ def index():
 @app.route("/logo.png")
 def logo():
     return send_file("logo.png", mimetype="image/png")
+
+
+@app.route("/health")
+def health():
+    """輕量健康檢查，不查 DB，讓 Render 可快速判定服務已就緒。"""
+    return "", 200
 
 
 @app.route("/favicon.ico")
