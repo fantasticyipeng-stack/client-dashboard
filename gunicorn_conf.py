@@ -1,16 +1,19 @@
-# Gunicorn config: 過濾 /health 的 access log，避免 log 被健康檢查洗版
+# Gunicorn config: 不記錄 /health 的 access log，避免被 Render 健康檢查洗版
 import logging
 
-
-class NoHealthAccessFilter(logging.Filter):
-    def filter(self, record):
-        try:
-            return "/health" not in (record.getMessage() or "")
-        except Exception:
-            return True
+# 自訂 Logger：/health 請求完全不寫入 access log
+try:
+    from gunicorn.glogging import Logger
+except ImportError:
+    Logger = object
 
 
-def post_fork(server, worker):
-    log = logging.getLogger("gunicorn.access")
-    for h in log.handlers:
-        h.addFilter(NoHealthAccessFilter())
+class NoHealthLogger(Logger):
+    def access(self, resp, req, environ, request_time):
+        if environ.get("PATH_INFO") == "/health":
+            return
+        super().access(resp, req, environ, request_time)
+
+
+# 讓 gunicorn 使用自訂 logger
+logger_class = NoHealthLogger
