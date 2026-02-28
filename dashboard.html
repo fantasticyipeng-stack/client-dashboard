@@ -312,21 +312,14 @@ textarea { resize: vertical; min-height: 50px; }
   .ms-wrap { flex: 1; min-width: 0; }
   .ms-btn { font-size: 12px; padding: 7px 8px; }
 
-  /* Table: remove min-width for mobile, use card-like compact layout */
   .table-wrapper { padding: 0 10px 16px; }
-  table { min-width: 0; width: 100%; }
-  thead th { padding: 6px 4px; font-size: 10px; }
-  tbody td { padding: 6px 4px; font-size: 11px; }
-  .note-cell { max-width: 60px; }
+  .table-container { -webkit-overflow-scrolling: touch; }
+  table { min-width: 720px; }
+  thead th { padding: 6px 5px; font-size: 10px; }
+  tbody td { padding: 6px 5px; font-size: 11px; }
+  .note-cell { max-width: 80px; }
   .note-cell span { -webkit-line-clamp: 1; }
-  .actions .btn { padding: 3px 5px; font-size: 10px; }
-  /* Hide less important columns on small screens */
-  .table-container th:nth-child(3),
-  .table-container td:nth-child(3),
-  .table-container th:nth-child(5),
-  .table-container td:nth-child(5),
-  .table-container th:nth-child(8),
-  .table-container td:nth-child(8) { display: none; }
+  .actions .btn { padding: 4px 6px; font-size: 10px; }
 
   .page-title { padding: 14px 14px 6px; font-size: 16px; }
   .profile-grid { padding: 10px 10px 20px; grid-template-columns: 1fr; gap: 12px; }
@@ -801,9 +794,18 @@ function getSelectedValues(did){
   return new Set(checked.map(cb=>cb.value));
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.ms-wrap'))document.querySelectorAll('.ms-drop.open').forEach(d=>d.classList.remove('open'));});
+document.getElementById('editorProfileGrid')&&document.getElementById('editorProfileGrid').addEventListener('click',e=>{const btn=e.target.closest('.editor-archive-btn');if(!btn)return;const name=btn.getAttribute('data-editor-name');if(!name)return;if(btn.getAttribute('data-action')==='archive')archiveEditor(name);else unarchiveEditor(name);});
 
 // ── Storage ──
-async function apiCall(path,opts={}){const res=await fetch(window.location.origin+path,{headers:{'Content-Type':'application/json'},...opts,body:opts.body?JSON.stringify(opts.body):undefined});if(!res.ok)throw new Error(`API ${res.status}`);return res.json();}
+async function apiCall(path,opts={}){
+  const res=await fetch(window.location.origin+path,{headers:{'Content-Type':'application/json'},...opts,body:opts.body?JSON.stringify(opts.body):undefined});
+  let data; try{ data=await res.json(); }catch(e){ data=null; }
+  if(!res.ok){
+    const msg=(data&&data.error)?data.error:`伺服器錯誤 (${res.status})`;
+    const err=new Error(msg); err.status=res.status; err.data=data; throw err;
+  }
+  return data||{};
+}
 function lsLoad(k,d){const r=localStorage.getItem(k);if(r)return JSON.parse(r);if(d){localStorage.setItem(k,JSON.stringify(d));return d;}return[];}
 function lsSave(k,d){localStorage.setItem(k,JSON.stringify(d));}
 function initLocalDefaults(){
@@ -877,8 +879,34 @@ function populateDropdowns(){
 }
 
 // ── Quick add ──
-async function quickAddClient(){const name=prompt('輸入新客戶名稱：');if(!name||!name.trim())return;const n=name.trim();if(clients.some(c=>c.name===n)){toast('此客戶已存在',1);return;}if(serverMode){const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}else{clients.push({id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});lsSave(LS_CLIENTS,clients);}toast(`已新增客戶「${n}」`);await loadAll();document.getElementById('clientName').value=n;}
-async function quickAddEditor(){const name=prompt('輸入新人員名稱：');if(!name||!name.trim())return;const n=name.trim();if(editors.some(e=>e.name===n)){toast('此人員已存在',1);return;}if(serverMode){const r=await apiCall('/api/editors',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}else{editors.push({id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1),name:n});lsSave(LS_EDITORS,editors);}toast(`已新增人員「${n}」`);await loadAll();document.getElementById('editor').value=n;}
+async function quickAddClient(){
+  const name=prompt('輸入新客戶名稱：');if(!name||!name.trim())return;const n=name.trim();
+  if(clients.some(c=>c.name===n)){toast('此客戶已存在',1);return;}
+  try{
+    if(serverMode){
+      const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});
+      if(r.error){toast(r.error,1);return;}
+      clients.push({id:r.id||(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});
+    }else{clients.push({id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});lsSave(LS_CLIENTS,clients);}
+    toast(`已新增客戶「${n}」`);
+    try{await loadAll();}catch(e){console.warn('loadAll',e);}
+    populateDropdowns();document.getElementById('clientName').value=n;
+  }catch(e){toast(e.message||'新增客戶失敗',1);}
+}
+async function quickAddEditor(){
+  const name=prompt('輸入新人員名稱：');if(!name||!name.trim())return;const n=name.trim();
+  if(editors.some(e=>e.name===n)){toast('此人員已存在',1);return;}
+  try{
+    if(serverMode){
+      const r=await apiCall('/api/editors',{method:'POST',body:{name:n}});
+      if(r.error){toast(r.error,1);return;}
+      editors.push({id:r.id||(editors.length?Math.max(...editors.map(e=>e.id))+1:1),name:n});
+    }else{editors.push({id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1),name:n});lsSave(LS_EDITORS,editors);}
+    toast(`已新增人員「${n}」`);
+    try{await loadAll();}catch(e){console.warn('loadAll',e);}
+    populateDropdowns();document.getElementById('editor').value=n;
+  }catch(e){toast(e.message||'新增人員失敗',1);}
+}
 
 function quickArchiveClient(){
   const sel=document.getElementById('clientName');const v=sel.value;
@@ -1174,10 +1202,15 @@ function openArchiveClientModal(name){
 function closeArchiveClientModal(){document.getElementById('archiveClientModal').classList.remove('active');pendingArchiveClientName=null;}
 async function confirmArchiveClient(reason){
   const name=pendingArchiveClientName;closeArchiveClientModal();if(!name)return;
-  const c=[...clients,...archivedClients].find(x=>x.name===name);
-  if(serverMode&&c){await apiCall(`/api/clients/${c.id}/archive`,{method:'POST',body:{reason}});}
-  else{const all=lsLoad(LS_CLIENTS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=true;all[idx].archive_reason=reason;}lsSave(LS_CLIENTS,all);}
-  toast(`已典藏客戶「${name}」（${reason}）`);await loadAll();renderClientProfiles();
+  try{
+    const c=[...clients,...archivedClients].find(x=>x.name===name);
+    if(serverMode&&c){await apiCall(`/api/clients/${c.id}/archive`,{method:'POST',body:{reason}});}
+    else{const all=lsLoad(LS_CLIENTS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=true;all[idx].archive_reason=reason;}lsSave(LS_CLIENTS,all);}
+    toast(`已典藏客戶「${name}」（${reason}）`);
+    await loadAll();
+    clientStatusFilter=reason;const sel=document.getElementById('clientStatusFilter');if(sel)sel.value=reason;
+    renderClientProfiles();
+  }catch(e){toast(e.message||'典藏失敗',1);}
 }
 async function unarchiveClient(name){
   const c=[...clients,...archivedClients].find(x=>x.name===name);
@@ -1198,16 +1231,26 @@ function confirmDeleteEditor(name){
   document.getElementById('confirmModal').classList.add('active');
 }
 async function archiveEditor(name){
-  const e=[...editors,...archivedEditors].find(x=>x.name===name);
-  if(serverMode&&e){await apiCall(`/api/editors/${e.id}/archive`,{method:'POST'});}
-  else{const all=lsLoad(LS_EDITORS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=true;}lsSave(LS_EDITORS,all);}
-  toast(`已典藏人員「${name}」`);await loadAll();renderEditorProfiles();
+  try{
+    const e=[...editors,...archivedEditors].find(x=>x.name===name);
+    if(serverMode&&e){await apiCall(`/api/editors/${e.id}/archive`,{method:'POST'});}
+    else{const all=lsLoad(LS_EDITORS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=true;}lsSave(LS_EDITORS,all);}
+    toast(`已典藏人員「${name}」`);
+    await loadAll();
+    editorStatusFilter='已結束合作';const sel=document.getElementById('editorStatusFilter');if(sel)sel.value='已結束合作';
+    renderEditorProfiles();
+  }catch(e){toast(e.message||'典藏失敗',1);}
 }
 async function unarchiveEditor(name){
-  const e=[...editors,...archivedEditors].find(x=>x.name===name);
-  if(serverMode&&e){await apiCall(`/api/editors/${e.id}/unarchive`,{method:'POST'});}
-  else{const all=lsLoad(LS_EDITORS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=false;}lsSave(LS_EDITORS,all);}
-  toast(`已取消典藏人員「${name}」`);await loadAll();renderEditorProfiles();
+  try{
+    const e=[...editors,...archivedEditors].find(x=>x.name===name);
+    if(serverMode&&e){await apiCall(`/api/editors/${e.id}/unarchive`,{method:'POST'});}
+    else{const all=lsLoad(LS_EDITORS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=false;}lsSave(LS_EDITORS,all);}
+    toast(`已取消典藏人員「${name}」`);
+    await loadAll();
+    editorStatusFilter='合作中';const sel=document.getElementById('editorStatusFilter');if(sel)sel.value='合作中';
+    renderEditorProfiles();
+  }catch(e){toast(e.message||'取消典藏失敗',1);}
 }
 
 function openAddClientModal(){ document.getElementById('newClientName').value=''; document.getElementById('newClientBudget').value=''; document.getElementById('addClientModal').classList.add('active'); }
@@ -1218,11 +1261,17 @@ async function submitAddClient(){
   if(clients.some(c=>c.name===n)){toast('此客戶已存在',1);return;}
   const budget=parseInt(document.getElementById('newClientBudget').value,10)||0;
   try {
-    if(serverMode){const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}
-    else{clients.push({id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});lsSave(LS_CLIENTS,clients);}
+    if(serverMode){
+      const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});
+      if(r.error){toast(r.error,1);return;}
+      const newId=(r.id!=null&&r.id!==undefined)?r.id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1);
+      clients.push({id:newId,name:n});
+    } else{clients.push({id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});lsSave(LS_CLIENTS,clients);}
     const p=getClientProfile(n); p.budget_per_video=budget; saveClientProfile(n,p);
-    closeAddClientModal(); toast(`已新增客戶「${n}」`); await loadAll(); renderClientProfiles();
-  } catch(e){ console.error(e); toast('新增失敗，請稍後再試',1); }
+    closeAddClientModal(); toast(`已新增客戶「${n}」`);
+    try{ await loadAll(); } catch(e){ console.warn('loadAll after add client',e); }
+    renderClientProfiles();
+  } catch(e){ console.error(e); toast(e&&e.message?e.message:'新增失敗，請稍後再試',1); }
 }
 async function addClientFromProfile(){ openAddClientModal(); }
 
@@ -1297,7 +1346,7 @@ function renderEditorProfiles(){
     return`<div class="profile-card">
       <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${esc(ed.name)} <span class="work-status-badge ws-${ws}">${ws}</span>
         <span style="font-size:12px;font-weight:400;color:var(--text2)">進行中: ${assignedVideos} 支</span>
-        ${ed.archived?`<button class="btn btn-outline btn-sm" style="margin-left:auto;font-size:11px;padding:3px 8px" onclick="unarchiveEditor('${esc(ed.name)}')">取消典藏</button>`:`<button class="btn btn-outline btn-sm" style="margin-left:auto;font-size:11px;padding:3px 8px" onclick="archiveEditor('${esc(ed.name)}')">典藏</button>`}</h3>
+        ${ed.archived?`<button type="button" class="btn btn-outline btn-sm editor-archive-btn" style="margin-left:auto;font-size:11px;padding:3px 8px" data-editor-name="${esc(ed.name)}" data-action="unarchive">取消典藏</button>`:`<button type="button" class="btn btn-outline btn-sm editor-archive-btn" style="margin-left:auto;font-size:11px;padding:3px 8px" data-editor-name="${esc(ed.name)}" data-action="archive">典藏</button>`}</h3>
       <div class="profile-row">
         <div class="profile-field"><label>工作狀態</label>
           <select onchange="onEditorFieldChange('${esc(ed.name)}','work_status',this.value);renderEditorProfiles()">
@@ -1324,17 +1373,19 @@ async function addEditorFromProfile(){
   const name=prompt('輸入新人員名稱：');if(!name||!name.trim())return;
   const n=name.trim();
   if(editors.some(e=>e.name===n)){toast('此人員已存在',1);return;}
-  if(serverMode){
-    const r=await apiCall('/api/editors',{method:'POST',body:{name:n}});
-    if(r.error){toast(r.error,1);return;}
-    const newId=(r.id!=null&&r.id!==undefined)?r.id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1);
-    editors.push({id:newId,name:n});
-  } else{editors.push({id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1),name:n});lsSave(LS_EDITORS,editors);}
-  toast(`已新增人員「${n}」`);
-  try{ await loadAll(); } catch(e){ console.warn('loadAll after add editor',e); }
-  populateDropdowns();
-  buildMultiSelect('msEditorDrop',editors.map(e=>e.name),'msEditorCount');
-  renderEditorProfiles();
+  try {
+    if(serverMode){
+      const r=await apiCall('/api/editors',{method:'POST',body:{name:n}});
+      if(r.error){toast(r.error,1);return;}
+      const newId=(r.id!=null&&r.id!==undefined)?r.id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1);
+      editors.push({id:newId,name:n});
+    } else{editors.push({id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1),name:n});lsSave(LS_EDITORS,editors);}
+    toast(`已新增人員「${n}」`);
+    try{ await loadAll(); } catch(e){ console.warn('loadAll after add editor',e); }
+    populateDropdowns();
+    buildMultiSelect('msEditorDrop',editors.map(e=>e.name),'msEditorCount');
+    renderEditorProfiles();
+  } catch(e){ console.error(e); toast(e&&e.message?e.message:'新增失敗，請稍後再試',1); }
 }
 
 function onEditorSuitableChange(name){

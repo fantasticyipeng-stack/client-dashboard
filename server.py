@@ -359,9 +359,10 @@ def add_client():
         return jsonify({"error": "名稱不可為空"}), 400
     if Client.query.filter_by(name=name).first():
         return jsonify({"error": "此客戶已存在"}), 409
-    db.session.add(Client(name=name))
+    c = Client(name=name)
+    db.session.add(c)
     db.session.commit()
-    return jsonify({"message": "added"}), 201
+    return jsonify({"id": c.id, "name": c.name}), 201
 
 
 @app.route("/api/clients/<int:cid>", methods=["DELETE"])
@@ -415,9 +416,10 @@ def add_editor():
         return jsonify({"error": "名稱不可為空"}), 400
     if Editor.query.filter_by(name=name).first():
         return jsonify({"error": "此人員已存在"}), 409
-    db.session.add(Editor(name=name))
+    e = Editor(name=name)
+    db.session.add(e)
     db.session.commit()
-    return jsonify({"message": "added"}), 201
+    return jsonify({"id": e.id, "name": e.name}), 201
 
 
 @app.route("/api/editors/<int:eid>", methods=["DELETE"])
