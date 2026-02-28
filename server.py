@@ -238,12 +238,6 @@ def seed_defaults():
 
 # ── API: Serve frontend ──
 
-@app.route("/health")
-def health():
-    """Lightweight health check for Render; do not touch DB."""
-    return jsonify({"status": "ok"}), 200
-
-
 @app.route("/")
 def index():
     return send_file("dashboard.html")
@@ -1043,45 +1037,18 @@ _scheduler.add_job(scheduled_overdue_check, "cron", hour=_check_hour, minute=_ch
 _scheduler.add_job(scheduled_daily_update, "cron", hour="8,12,16,20", minute=0)
 
 
-_db_ready = None  # set to threading.Event() in _run_startup
+with app.app_context():
+    try:
+        db.create_all()
+        migrate_db()
+        seed_defaults()
+        print("[Startup] Database initialized successfully.")
+    except Exception as e:
+        print(f"[Startup ERROR] {e}")
 
 
-def _run_startup():
-    """Run DB init and scheduler in background so worker can accept requests immediately."""
-    import threading
-    global _db_ready
-    _db_ready = threading.Event()
-
-    def _init():
-        with app.app_context():
-            try:
-                db.create_all()
-                migrate_db()
-                seed_defaults()
-                print("[Startup] Database initialized successfully.")
-            except Exception as e:
-                print(f"[Startup ERROR] {e}")
-            try:
-                _scheduler.start()
-                print(f"[Scheduler] Overdue check at {_check_hour:02d}:{_check_minute:02d}, daily LINE at 08:00, 12:00, 16:00, 20:00")
-            except Exception as e:
-                print(f"[Scheduler] {e}")
-        _db_ready.set()
-
-    t = threading.Thread(target=_init, daemon=True)
-    t.start()
-
-
-_run_startup()
-
-
-@app.before_request
-def wait_for_db():
-    """Ensure DB is ready before handling requests that need it (skip /health)."""
-    if request.path == "/health":
-        return
-    if _db_ready is not None and not _db_ready.is_set():
-        _db_ready.wait(timeout=90)
+_scheduler.start()
+print(f"[Scheduler] Overdue check at {_check_hour:02d}:{_check_minute:02d}, daily LINE at 08:00, 12:00, 16:00, 20:00")
 
 
 if __name__ == "__main__":
