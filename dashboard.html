@@ -100,7 +100,7 @@ tbody tr:hover { background: #f8fafc; }
 tbody tr:last-child td { border-bottom: none; }
 
 /* 狀態橫向顯示，避免直書 */
-.ms-btn, thead th, .status-pipeline { writing-mode: horizontal-tb; text-orientation: mixed; white-space: nowrap; }
+.ms-btn, thead th, .status-pipeline-wrap, .status-pipeline { writing-mode: horizontal-tb; text-orientation: mixed; white-space: nowrap; }
 .status-badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .status-待分配 { background: #fef3c7; color: #92400e; }
 .status-剪輯中 { background: #dbeafe; color: #1e40af; }
@@ -109,15 +109,19 @@ tbody tr:last-child td { border-bottom: none; }
 .status-已完成 { background: #d1fae5; color: #065f46; }
 .status-已上傳雲端 { background: #cffafe; color: #155e75; }
 .status-已上傳影片 { background: #f0fdf4; color: #14532d; }
-/* 五階段圓圈：準備、初剪、優化、排程、上片 */
-.status-pipeline { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; }
-.status-pipeline .step { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #e2e8f0; background: #f8fafc; display: flex; align-items: center; justify-content: center; }
-.status-pipeline .step.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+/* 五階段圓圈：準備、初剪、優化、排程、上片；文字在圓圈下方，右側顯示狀態 */
+.status-pipeline-wrap { display: inline-flex; align-items: flex-start; gap: 10px; flex-wrap: nowrap; }
+.status-pipeline { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; }
+.status-pipeline .steps-row { display: flex; align-items: center; gap: 0; }
+.status-pipeline .step { width: 22px; height: 22px; border-radius: 50%; border: 2px solid #e2e8f0; background: #f8fafc; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 0; }
+.status-pipeline .step.active { background: #3b82f6; border-color: #3b82f6; }
 .status-pipeline .step.active.step-upload { background: #22c55e; border-color: #22c55e; }
-.status-pipeline .step.active + .step { border-color: #cbd5e1; }
-.status-pipeline .conn { width: 8px; height: 2px; background: #e2e8f0; }
+.status-pipeline .conn { width: 10px; height: 2px; background: #e2e8f0; flex-shrink: 0; }
 .status-pipeline .conn.active { background: #3b82f6; }
 .status-pipeline .conn.active-upload { background: #22c55e; }
+.status-pipeline .labels-row { display: flex; gap: 10px; width: 150px; font-size: 9px; color: var(--text2); line-height: 1.2; }
+.status-pipeline .labels-row span { flex: 0 0 22px; text-align: center; }
+.status-pipeline-wrap .status-badge { flex-shrink: 0; margin-left: 4px; }
 .overdue-tag { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--danger); color: #fff; margin-right: 6px; }
 .note-cell { max-width: 130px; }
 .note-cell span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -402,7 +406,7 @@ textarea { resize: vertical; min-height: 50px; }
 
 <!-- PAGE 2: Client Profiles -->
 <div id="page-clients" class="page">
-  <div class="page-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-right:32px">客戶資料與目標 <span style="display:flex;align-items:center;gap:6px"><label style="font-size:13px;color:var(--text2)">狀態</label><select id="clientStatusFilter" onchange="clientStatusFilter=this.value;loadAll();renderClientProfiles()" style="font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
+  <div class="page-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-right:32px">客戶資料與目標 <span class="page-title-status-wrap" style="display:flex;align-items:center;gap:6px;white-space:nowrap"><label style="font-size:13px;color:var(--text2);min-width:2em">狀態</label><select id="clientStatusFilter" onchange="clientStatusFilter=this.value;loadAll();renderClientProfiles()" style="font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
       <option value="合作中">合作中</option><option value="結案">結案</option><option value="失敗">失敗</option><option value="全部">全部</option>
     </select></span> <button class="btn btn-primary btn-sm" onclick="addClientFromProfile()">＋ 新增客戶</button></div>
   <div class="profile-grid" id="clientProfileGrid"></div>
@@ -419,7 +423,7 @@ textarea { resize: vertical; min-height: 50px; }
 
 <!-- PAGE 4: Editor Profiles -->
 <div id="page-editors" class="page">
-  <div class="page-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-right:32px">剪輯人員管理 <span style="display:flex;align-items:center;gap:6px"><label style="font-size:13px;color:var(--text2)">狀態</label><select id="editorStatusFilter" onchange="editorStatusFilter=this.value;loadAll();renderEditorProfiles()" style="font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
+  <div class="page-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding-right:32px">剪輯人員管理 <span class="page-title-status-wrap" style="display:flex;align-items:center;gap:6px;white-space:nowrap"><label style="font-size:13px;color:var(--text2);min-width:2em">狀態</label><select id="editorStatusFilter" onchange="editorStatusFilter=this.value;loadAll();renderEditorProfiles()" style="font-size:13px;padding:4px 8px;border-radius:6px;border:1px solid var(--border)">
       <option value="合作中">合作中</option><option value="已結束合作">已結束合作</option><option value="全部">全部</option>
     </select></span> <button class="btn btn-primary btn-sm" onclick="addEditorFromProfile()">＋ 新增人員</button></div>
   <div class="profile-grid" id="editorProfileGrid"></div>
@@ -535,8 +539,8 @@ textarea { resize: vertical; min-height: 50px; }
   <div class="confirm-box">
     <p id="confirmMsg">確定要刪除這筆資料嗎？</p>
     <div class="confirm-actions">
-      <button class="btn btn-outline" onclick="closeConfirm()">取消</button>
-      <button class="btn btn-primary" id="confirmActionBtn" onclick="confirmAction()">確定</button>
+      <button type="button" class="btn btn-outline" onclick="closeConfirm()">取消</button>
+      <button type="button" class="btn btn-primary" id="confirmActionBtn" onclick="confirmAction()">確定</button>
     </div>
   </div>
 </div>
@@ -589,7 +593,7 @@ textarea { resize: vertical; min-height: 50px; }
       <div class="form-group"><label>客戶名稱 <span class="required">*</span></label><input type="text" id="newClientName" placeholder="請輸入客戶名稱"></div>
       <div class="form-group"><label>每部金額（元）</label><input type="number" id="newClientBudget" min="0" placeholder="選填，用於營收計算"></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-outline" onclick="closeAddClientModal()">取消</button><button class="btn btn-primary" onclick="submitAddClient()">確定新增</button></div>
+    <div class="modal-footer"><button type="button" class="btn btn-outline" onclick="closeAddClientModal()">取消</button><button type="button" class="btn btn-primary" onclick="submitAddClient()">確定新增</button></div>
   </div>
 </div>
 
@@ -692,14 +696,16 @@ function statusToStep(s){
 const STATUS_STEP_LABELS=['準備','初剪','優化','排程','上片'];
 function renderStatusPipeline(status){
   const step=statusToStep(status);
-  let html='<span class="status-pipeline" title="'+esc(status)+'">';
+  let stepsHtml='', labelsHtml='';
   for(let i=0;i<5;i++){
-    if(i>0){ const connActive=step>=i; html+='<span class="conn'+(connActive?(i===4?' active-upload':' active'):'')+'"></span>'; }
+    if(i>0){ const connActive=step>=i; stepsHtml+='<span class="conn'+(connActive?(i===4?' active-upload':' active'):'')+'"></span>'; }
     const active=i<=step;
     const uploadClass=i===4&&active?' step-upload':'';
-    html+='<span class="step'+(active?' active':'')+uploadClass+'" title="'+esc(STATUS_STEP_LABELS[i])+'">'+(active?STATUS_STEP_LABELS[i]:'')+'</span>';
+    stepsHtml+='<span class="step'+(active?' active':'')+uploadClass+'"></span>';
+    labelsHtml+='<span>'+STATUS_STEP_LABELS[i]+'</span>';
   }
-  return html+'</span>';
+  const badgeClass='status-badge status-'+status.replace(/\s/g,'');
+  return '<span class="status-pipeline-wrap" title="'+esc(status)+'"><span class="status-pipeline"><span class="steps-row">'+stepsHtml+'</span><span class="labels-row">'+labelsHtml+'</span></span><span class="'+badgeClass+'">'+esc(status)+'</span></span>';
 }
 
 // ── Page switching ──
@@ -895,7 +901,7 @@ function updateStats(){
   document.getElementById('stats').innerHTML=`
     <div class="stat-card"><div class="label">全部任務</div><div class="value blue">${total}</div></div>
     <div class="stat-card"><div class="label">剪輯中</div><div class="value yellow">${editing}</div></div>
-    <div class="stat-card"><div class="label">已完成以上</div><div class="value green">${done}</div></div>
+    <div class="stat-card"><div class="label">影片完成數</div><div class="value green">${done}</div></div>
     <div class="stat-card"><div class="label">即將到期（3天內）</div><div class="value" style="color:var(--warning)">${urgent}</div></div>
     <div class="stat-card"><div class="label">已逾期</div><div class="value red">${overdue}</div></div>`;
 }
@@ -1012,16 +1018,21 @@ function viewDetail(id){
 }
 function closeDetail(){document.getElementById('detailModal').classList.remove('active');}
 
-function deleteItem(id){pendingDeleteId=id;document.getElementById('confirmMsg').textContent='確定要典藏這筆影片任務嗎？';document.getElementById('confirmModal').classList.add('active');}
+function deleteItem(id){
+  pendingDeleteId=id;
+  document.getElementById('confirmMsg').textContent='確定要典藏這筆影片任務嗎？';
+  window._confirmCb=async function(){
+    if(serverMode){await apiCall(`/api/videos/${id}/archive`,{method:'POST'});}
+    else{const all=lsLoad(LS_VIDEOS,[]);const v=all.find(d=>d.id===id);if(v){v.archived=true;}lsSave(LS_VIDEOS,all);}
+    toast('任務已典藏');await loadAll();
+  };
+  document.getElementById('confirmModal').classList.add('active');
+}
 function closeConfirm(){document.getElementById('confirmModal').classList.remove('active');pendingDeleteId=null;window._confirmCb=null;}
 async function confirmAction(){
   if(window._confirmCb){
     await window._confirmCb();
     window._confirmCb=null;
-  } else if(pendingDeleteId){
-    if(serverMode){await apiCall(`/api/videos/${pendingDeleteId}/archive`,{method:'POST'});}
-    else{const all=lsLoad(LS_VIDEOS,[]);const v=all.find(d=>d.id===pendingDeleteId);if(v){v.archived=true;}lsSave(LS_VIDEOS,all);}
-    toast('任務已典藏');await loadAll();
   }
   closeConfirm();
 }
@@ -1206,10 +1217,12 @@ async function submitAddClient(){
   if(!n){toast('請輸入客戶名稱',1);return;}
   if(clients.some(c=>c.name===n)){toast('此客戶已存在',1);return;}
   const budget=parseInt(document.getElementById('newClientBudget').value,10)||0;
-  if(serverMode){const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}
-  else{clients.push({id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});lsSave(LS_CLIENTS,clients);}
-  const p=getClientProfile(n); p.budget_per_video=budget; saveClientProfile(n,p);
-  closeAddClientModal(); toast(`已新增客戶「${n}」`); await loadAll(); renderClientProfiles();
+  try {
+    if(serverMode){const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}
+    else{clients.push({id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});lsSave(LS_CLIENTS,clients);}
+    const p=getClientProfile(n); p.budget_per_video=budget; saveClientProfile(n,p);
+    closeAddClientModal(); toast(`已新增客戶「${n}」`); await loadAll(); renderClientProfiles();
+  } catch(e){ console.error(e); toast('新增失敗，請稍後再試',1); }
 }
 async function addClientFromProfile(){ openAddClientModal(); }
 
@@ -1311,9 +1324,17 @@ async function addEditorFromProfile(){
   const name=prompt('輸入新人員名稱：');if(!name||!name.trim())return;
   const n=name.trim();
   if(editors.some(e=>e.name===n)){toast('此人員已存在',1);return;}
-  if(serverMode){const r=await apiCall('/api/editors',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}
-  else{editors.push({id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1),name:n});lsSave(LS_EDITORS,editors);}
-  toast(`已新增人員「${n}」`);await loadAll();renderEditorProfiles();
+  if(serverMode){
+    const r=await apiCall('/api/editors',{method:'POST',body:{name:n}});
+    if(r.error){toast(r.error,1);return;}
+    const newId=(r.id!=null&&r.id!==undefined)?r.id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1);
+    editors.push({id:newId,name:n});
+  } else{editors.push({id:(editors.length?Math.max(...editors.map(e=>e.id))+1:1),name:n});lsSave(LS_EDITORS,editors);}
+  toast(`已新增人員「${n}」`);
+  try{ await loadAll(); } catch(e){ console.warn('loadAll after add editor',e); }
+  populateDropdowns();
+  buildMultiSelect('msEditorDrop',editors.map(e=>e.name),'msEditorCount');
+  renderEditorProfiles();
 }
 
 function onEditorSuitableChange(name){
