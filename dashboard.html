@@ -172,6 +172,7 @@ textarea { resize: vertical; min-height: 50px; }
 
 .profile-grid { padding: 16px 32px 32px; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
 .profile-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; overflow: hidden; }
+.profile-card.client-card-clickable { cursor: pointer; }
 .profile-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
 .profile-card h3 > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .profile-card h3 .client-budget-wrap { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
@@ -313,13 +314,22 @@ textarea { resize: vertical; min-height: 50px; }
   .ms-btn { font-size: 12px; padding: 7px 8px; }
 
   .table-wrapper { padding: 0 10px 16px; }
-  .table-container { -webkit-overflow-scrolling: touch; }
-  table { min-width: 720px; }
-  thead th { padding: 6px 5px; font-size: 10px; }
-  tbody td { padding: 6px 5px; font-size: 11px; }
-  .note-cell { max-width: 80px; }
+  .table-container { -webkit-overflow-scrolling: touch; overflow-x: auto; max-width: 100%; }
+  table { min-width: 0; width: 100%; table-layout: fixed; }
+  table thead th:nth-child(1), table tbody td:nth-child(1) { width: 14%; }
+  table thead th:nth-child(2), table tbody td:nth-child(2) { width: 8%; }
+  table thead th:nth-child(3), table tbody td:nth-child(3) { width: 18%; }
+  table thead th:nth-child(4), table tbody td:nth-child(4) { width: 18%; }
+  table thead th:nth-child(5), table tbody td:nth-child(5) { width: 10%; }
+  table thead th:nth-child(6), table tbody td:nth-child(6) { width: 10%; }
+  table thead th:nth-child(7), table tbody td:nth-child(7) { width: 12%; }
+  table thead th:nth-child(8), table tbody td:nth-child(8) { width: 10%; }
+  thead th { padding: 6px 4px; font-size: 10px; }
+  tbody td { padding: 6px 4px; font-size: 11px; }
+  .note-cell { max-width: 60px; }
   .note-cell span { -webkit-line-clamp: 1; }
-  .actions .btn { padding: 4px 6px; font-size: 10px; }
+  .actions { flex-wrap: wrap; gap: 2px; }
+  .actions .btn { padding: 3px 5px; font-size: 10px; }
 
   .page-title { padding: 14px 14px 6px; font-size: 16px; }
   .profile-grid { padding: 10px 10px 20px; grid-template-columns: 1fr; gap: 12px; }
@@ -498,10 +508,6 @@ textarea { resize: vertical; min-height: 50px; }
           </div>
         </div>
         <div class="form-group">
-          <label>觀看數（橙果創意營收計算用）</label>
-          <input type="number" id="viewCount" min="0" placeholder="選填">
-        </div>
-        <div class="form-group">
           <label>需要注意的事項</label>
           <textarea id="notes" rows="2"></textarea>
         </div>
@@ -575,6 +581,27 @@ textarea { resize: vertical; min-height: 50px; }
       <button type="button" class="btn btn-outline btn-sm" onclick="addVideoPlatformViewRow()" style="margin-top:8px">＋ 新增一筆</button>
     </div>
     <div class="modal-footer"><button class="btn btn-outline" onclick="closeVideoPlatformViewsModal()">取消</button><button class="btn btn-primary" onclick="submitVideoPlatformViews()">儲存</button></div>
+  </div>
+</div>
+
+<!-- Client 影片成效與提醒 Modal -->
+<div class="modal-overlay" id="clientDetailModal">
+  <div class="modal" style="max-width:620px">
+    <div class="modal-header"><h2 id="clientDetailModalTitle">影片成效與提醒</h2><button class="modal-close" onclick="closeClientDetailModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="clientDetailClientName">
+      <div class="form-group">
+        <label>影片成效</label>
+        <div class="mini-table-wrap"><table class="profile-mini-table"><thead><tr>
+          <th style="cursor:pointer" onclick="sortClientVideos('video_id')" id="clientSortId">編號 <span></span></th>
+          <th>主題</th>
+          <th style="cursor:pointer" onclick="sortClientVideos('upload_date')" id="clientSortDate">上片日 <span></span></th>
+          <th style="cursor:pointer" onclick="sortClientVideos('views')" id="clientSortViews">總觀看數 <span></span></th>
+        </tr></thead><tbody id="clientDetailVideoBody"></tbody></table></div>
+      </div>
+      <div class="form-group"><label>提醒事項</label><textarea id="clientDetailReminders" rows="3" placeholder="提醒事項..."></textarea></div>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-outline" onclick="closeClientDetailModal()">關閉</button><button type="button" class="btn btn-primary" onclick="saveClientDetailModal()">儲存提醒</button></div>
   </div>
 </div>
 
@@ -669,6 +696,7 @@ let pendingStaffField=null, pendingStaffClientName=null;
 let clientProfiles={}, editorProfiles={};
 let didiMedia=[], didiSpeech=[], didiSoftware=[];
 let sortKey='upload_date', sortDir='asc', pendingDeleteId=null, pendingArchiveClientName=null, serverMode=false;
+let clientVideoSortKey='upload_date', clientVideoSortDir='desc';
 
 function toast(m,e){const el=document.createElement('div');el.className='toast'+(e?' error':'');el.textContent=m;document.getElementById('toastContainer').appendChild(el);setTimeout(()=>el.remove(),3000);}
 function esc(s){return s?String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'):'';}
@@ -795,6 +823,12 @@ function getSelectedValues(did){
 }
 document.addEventListener('click',e=>{if(!e.target.closest('.ms-wrap'))document.querySelectorAll('.ms-drop.open').forEach(d=>d.classList.remove('open'));});
 document.getElementById('editorProfileGrid')&&document.getElementById('editorProfileGrid').addEventListener('click',e=>{const btn=e.target.closest('.editor-archive-btn');if(!btn)return;const name=btn.getAttribute('data-editor-name');if(!name)return;if(btn.getAttribute('data-action')==='archive')archiveEditor(name);else unarchiveEditor(name);});
+document.getElementById('clientProfileGrid')&&document.getElementById('clientProfileGrid').addEventListener('click',e=>{
+  const card=e.target.closest('.client-card-clickable');if(!card)return;
+  if(e.target.closest('button')||e.target.closest('input')||e.target.closest('select')||e.target.closest('textarea'))return;
+  const name=card.getAttribute('data-client-name');if(name)openClientDetailModal(name);
+});
+document.getElementById('clientProfileGrid')&&document.getElementById('clientProfileGrid').addEventListener('click',e=>{const btn=e.target.closest('.client-detail-btn');if(btn){e.stopPropagation();openClientDetailModal(btn.getAttribute('data-client-name'));}});
 
 // ── Storage ──
 async function apiCall(path,opts={}){
@@ -965,15 +999,15 @@ function renderTable(){
     const ds=isOD?'color:var(--danger);font-weight:600':isUR?'color:var(--warning);font-weight:600':'';
     const ot=isOD?'<span class="overdue-tag">逾期</span>':'';
     const statusPipeline=renderStatusPipeline(d.status);
+    const isArchived=!!d.archived;
+    const actionBtns=isArchived
+      ?`<button class="btn btn-outline btn-sm" onclick="unarchiveVideo('${d.id}')">取消典藏</button><button class="btn btn-danger btn-sm" onclick="permanentDeleteVideo('${d.id}')">刪除</button>`
+      :`<button class="btn btn-outline btn-sm" onclick="viewDetail('${d.id}')">查看</button><button class="btn btn-primary btn-sm" onclick="editItem('${d.id}')">編輯</button><button class="btn btn-outline btn-sm" onclick="deleteItem('${d.id}')">典藏</button>`;
     return`<tr style="${bg}"><td>${ot}<strong>${esc(d.client_name)}</strong></td><td>${esc(d.video_id)}</td><td>${esc(d.topic)}</td>
       <td>${statusPipeline}</td>
       <td style="${ds}">${fmtDate(d.draft_date)}</td><td>${fmtDate(d.upload_date)}</td>
       <td>${esc(d.editor)}</td>
-      <td><div class="actions">
-        <button class="btn btn-outline btn-sm" onclick="viewDetail('${d.id}')">查看</button>
-        <button class="btn btn-primary btn-sm" onclick="editItem('${d.id}')">編輯</button>
-        <button class="btn btn-outline btn-sm" onclick="deleteItem('${d.id}')">典藏</button>
-      </div></td></tr>`;
+      <td><div class="actions">${actionBtns}</div></td></tr>`;
   }).join('');
 }
 
@@ -990,7 +1024,6 @@ function openModal(item){
   document.getElementById('status').value=item?item.status:'';
   document.getElementById('materialLink').value=item?(item.material_link||''):'';
   document.getElementById('scriptLink').value=item?(item.script_link||''):'';
-  document.getElementById('viewCount').value=item?(item.view_count||''):'';
   document.getElementById('notes').value=item?item.notes:'';
   document.getElementById('remarks').value=item?item.remarks:'';
   document.getElementById('formModal').classList.add('active');
@@ -999,7 +1032,7 @@ function closeModal(){document.getElementById('formModal').classList.remove('act
 
 async function handleSubmit(e){
   e.preventDefault();const editId=document.getElementById('editId').value;
-  const vc=document.getElementById('viewCount').value;
+  const existing=videos.find(v=>v.id===editId);
   const entry={
     client_name:document.getElementById('clientName').value,
     video_id:document.getElementById('videoId').value.trim(),
@@ -1010,7 +1043,7 @@ async function handleSubmit(e){
     status:document.getElementById('status').value,
     material_link:document.getElementById('materialLink').value.trim(),
     script_link:document.getElementById('scriptLink').value.trim(),
-    view_count:vc?parseInt(vc):0,
+    view_count:editId&&existing?(existing.view_count||0):0,
     notes:document.getElementById('notes').value.trim(),
     remarks:document.getElementById('remarks').value.trim(),
   };
@@ -1053,6 +1086,22 @@ function deleteItem(id){
     if(serverMode){await apiCall(`/api/videos/${id}/archive`,{method:'POST'});}
     else{const all=lsLoad(LS_VIDEOS,[]);const v=all.find(d=>d.id===id);if(v){v.archived=true;}lsSave(LS_VIDEOS,all);}
     toast('任務已典藏');await loadAll();
+  };
+  document.getElementById('confirmModal').classList.add('active');
+}
+async function unarchiveVideo(id){
+  try{
+    if(serverMode){await apiCall(`/api/videos/${id}/unarchive`,{method:'POST'});}
+    else{const all=lsLoad(LS_VIDEOS,[]);const v=all.find(d=>d.id===id);if(v){v.archived=false;}lsSave(LS_VIDEOS,all);}
+    toast('已取消典藏');await loadAll();
+  }catch(e){toast(e.message||'取消典藏失敗',1);}
+}
+function permanentDeleteVideo(id){
+  document.getElementById('confirmMsg').textContent='確定要永久刪除這筆影片任務嗎？刪除後無法復原。';
+  window._confirmCb=async function(){
+    if(serverMode){await apiCall(`/api/videos/${id}/delete_permanent`,{method:'POST'});}
+    else{const all=lsLoad(LS_VIDEOS,[]);const idx=all.findIndex(d=>d.id===id);if(idx>=0){all.splice(idx,1);}lsSave(LS_VIDEOS,all);}
+    toast('已刪除');await loadAll();
   };
   document.getElementById('confirmModal').classList.add('active');
 }
@@ -1137,47 +1186,83 @@ function renderClientProfiles(){
     const archiveReason=clientObj&&clientObj.archive_reason?clientObj.archive_reason:'';
     const p=getClientProfile(name);
     const clientVideos=(videosForStats||videos).filter(v=>v.client_name===name&&v.status==='已上傳影片');
+    const totalViewsSum=clientVideos.reduce((s,v)=>s+totalViews(v),0);
     const price=CLIENT_PRICES[name];
     const budget=p.budget_per_video||0;
-    const videoRows=clientVideos.length?clientVideos.map(v=>{
-      const total=totalViews(v);
-      return `<tr>
-      <td>${esc(v.video_id)}</td><td><button type="button" class="btn-link" onclick="openVideoPlatformViewsModal('${v.id}')">${esc(v.topic)}</button></td><td>${fmtDate(v.upload_date)}</td>
-      <td>${fmtNum(total)}</td>
-    </tr>`;
-    }).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text2)">尚無已上傳影片</td></tr>';
-
     const socialFields = [['social_ig','IG'],['social_threads','Threads'],['social_tiktok','TikTok'],['social_fb','FB']];
     const extra = CLIENT_EXTRA_SOCIAL[name];
     if(extra) socialFields.push(['social_'+extra[0], extra[1]]);
-
     const socialHtml = socialFields.map(([key,label])=>`
       <div class="profile-field" style="margin-bottom:6px">
         <label>${label}</label>
         <input type="url" value="${esc(p[key]||'')}" placeholder="https://..." onchange="onClientFieldChange('${esc(name)}','${key}',this.value)" style="font-size:12px;padding:5px 8px">
       </div>`).join('');
-
     const archiveBadge=archiveReason?`<span class="status-badge" style="background:#e2e8f0;color:var(--text2);margin-left:4px">${esc(archiveReason)}</span>`:'';
-    const archiveBtn=archiveReason?`<button class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px" onclick="unarchiveClient('${esc(name)}')">取消典藏</button>`:`<button class="btn btn-outline btn-sm client-delete-btn" style="font-size:11px;padding:3px 8px" onclick="openArchiveClientModal('${esc(name)}')">典藏</button>`;
-    return`<div class="profile-card">
-      <h3><span>${esc(name)}</span>${archiveBadge}<span class="client-budget-wrap"><input type="number" class="client-budget-input" min="0" value="${p.budget_per_video||0}" placeholder="0" onchange="onClientFieldChange('${esc(name)}','budget_per_video',this.value)" title="每部金額"><span class="client-budget-unit">元/支</span></span>${archiveBtn}</h3>
+    const archiveBtn=archiveReason?`<button class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();unarchiveClient('${esc(name)}')">取消典藏</button>`:`<button class="btn btn-outline btn-sm client-delete-btn" style="font-size:11px;padding:3px 8px" onclick="event.stopPropagation();openArchiveClientModal('${esc(name)}')">典藏</button>`;
+    const statsBlock=`<div class="profile-row" style="margin-bottom:10px;gap:12px">
+      <div class="profile-field" style="margin-bottom:0"><label>總上傳影片數</label><div style="font-size:18px;font-weight:700;color:var(--primary)">${clientVideos.length} 支</div></div>
+      <div class="profile-field" style="margin-bottom:0"><label>總觀看數</label><div style="font-size:18px;font-weight:700;color:var(--success)">${fmtNum(totalViewsSum)}</div></div>
+    </div>
+    <button type="button" class="btn btn-outline btn-sm client-detail-btn" data-client-name="${esc(name)}">影片成效與提醒</button>`;
+    return`<div class="profile-card client-card-clickable" data-client-name="${esc(name)}">
+      <h3><span>${esc(name)}</span>${archiveBadge}<span class="client-budget-wrap"><input type="number" class="client-budget-input" min="0" value="${p.budget_per_video||0}" placeholder="0" onclick="event.stopPropagation()" onchange="onClientFieldChange('${esc(name)}','budget_per_video',this.value)" title="每部金額"><span class="client-budget-unit">元/支</span></span>${archiveBtn}</h3>
+      ${statsBlock}
       <div class="profile-row">
-        <div class="profile-field"><label>目前粉絲數</label><input type="number" value="${p.current_followers||0}" min="0" onchange="onClientFieldChange('${esc(name)}','current_followers',this.value)"></div>
-        <div class="profile-field"><label>目標粉絲數</label><input type="number" value="${p.target_followers||0}" min="0" onchange="onClientFieldChange('${esc(name)}','target_followers',this.value)"></div>
+        <div class="profile-field"><label>目前粉絲數</label><input type="number" value="${p.current_followers||0}" min="0" onclick="event.stopPropagation()" onchange="onClientFieldChange('${esc(name)}','current_followers',this.value)"></div>
+        <div class="profile-field"><label>目標粉絲數</label><input type="number" value="${p.target_followers||0}" min="0" onclick="event.stopPropagation()" onchange="onClientFieldChange('${esc(name)}','target_followers',this.value)"></div>
       </div>
       <div class="profile-row">
-        <div class="profile-field"><label>負責業務</label><select onchange="onStaffSelect('${esc(name)}','account_manager',this.value)" style="font-size:12px;padding:5px 8px">${staffOptions('account_manager',p)}</select></div>
-        <div class="profile-field"><label>PM</label><select onchange="onStaffSelect('${esc(name)}','pm',this.value)" style="font-size:12px;padding:5px 8px">${staffOptions('pm',p)}</select></div>
+        <div class="profile-field"><label>負責業務</label><select onclick="event.stopPropagation()" onchange="onStaffSelect('${esc(name)}','account_manager',this.value)" style="font-size:12px;padding:5px 8px">${staffOptions('account_manager',p)}</select></div>
+        <div class="profile-field"><label>PM</label><select onclick="event.stopPropagation()" onchange="onStaffSelect('${esc(name)}','pm',this.value)" style="font-size:12px;padding:5px 8px">${staffOptions('pm',p)}</select></div>
       </div>
       <div class="profile-field"><label style="margin-bottom:6px">社群媒體連結</label>
         <div class="profile-row" style="grid-template-columns:1fr 1fr">${socialHtml}</div>
       </div>
-      <div class="profile-field"><label>影片成效（已上傳 ${clientVideos.length} 支）</label>
-        <div class="mini-table-wrap"><table class="profile-mini-table"><thead><tr><th>編號</th><th>主題</th><th>上片日</th><th>總觀看數</th></tr></thead><tbody>${videoRows}</tbody></table></div>
-      </div>
-      <div class="profile-field"><label>提醒事項</label><textarea rows="2" onchange="onClientFieldChange('${esc(name)}','reminders',this.value)">${esc(p.reminders||'')}</textarea></div>
     </div>`;
   }).join('');
+}
+function openClientDetailModal(name){
+  document.getElementById('clientDetailClientName').value=name;
+  document.getElementById('clientDetailModalTitle').textContent=name+' － 影片成效與提醒';
+  document.getElementById('clientDetailReminders').value=getClientProfile(name).reminders||'';
+  document.querySelectorAll('#clientDetailModal thead th span').forEach(s=>s.textContent='');
+  const arr=clientVideoSortDir==='asc'?' ▲':' ▼';
+  const idEl=document.getElementById('clientSortId'),dateEl=document.getElementById('clientSortDate'),viewsEl=document.getElementById('clientSortViews');
+  if(idEl&&clientVideoSortKey==='video_id')idEl.querySelector('span').textContent=arr;
+  if(dateEl&&clientVideoSortKey==='upload_date')dateEl.querySelector('span').textContent=arr;
+  if(viewsEl&&clientVideoSortKey==='views')viewsEl.querySelector('span').textContent=arr;
+  renderClientDetailVideoBody();
+  document.getElementById('clientDetailModal').classList.add('active');
+}
+function closeClientDetailModal(){ document.getElementById('clientDetailModal').classList.remove('active'); }
+function sortClientVideos(key){
+  if(clientVideoSortKey===key)clientVideoSortDir=clientVideoSortDir==='asc'?'desc':'asc';
+  else{ clientVideoSortKey=key; clientVideoSortDir='asc'; }
+  document.querySelectorAll('#clientDetailModal thead th span').forEach(s=>s.textContent='');
+  const idEl=document.getElementById('clientSortId'), dateEl=document.getElementById('clientSortDate'), viewsEl=document.getElementById('clientSortViews');
+  const arr=clientVideoSortDir==='asc'?' ▲':' ▼';
+  if(clientVideoSortKey==='video_id')idEl.querySelector('span').textContent=arr;
+  else if(clientVideoSortKey==='upload_date')dateEl.querySelector('span').textContent=arr;
+  else if(clientVideoSortKey==='views')viewsEl.querySelector('span').textContent=arr;
+  renderClientDetailVideoBody();
+}
+function renderClientDetailVideoBody(){
+  const name=document.getElementById('clientDetailClientName').value;
+  if(!name){document.getElementById('clientDetailVideoBody').innerHTML='';return;}
+  const clientVideos=(videosForStats||videos).filter(v=>v.client_name===name&&v.status==='已上傳影片').map(v=>({...v,views:totalViews(v)}));
+  clientVideos.sort((a,b)=>{
+    let va=a[clientVideoSortKey],vb=b[clientVideoSortKey];
+    if(clientVideoSortKey==='views'){va=a.views;vb=b.views;}
+    if(clientVideoSortDir==='asc')return va<vb?-1:va>vb?1:0;
+    return va>vb?-1:va<vb?1:0;
+  });
+  const rows=clientVideos.length?clientVideos.map(v=>`<tr><td>${esc(v.video_id)}</td><td><button type="button" class="btn-link" onclick="openVideoPlatformViewsModal('${v.id}');event.stopPropagation()">${esc(v.topic)}</button></td><td>${fmtDate(v.upload_date)}</td><td>${fmtNum(v.views)}</td></tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text2)">尚無已上傳影片</td></tr>';
+  document.getElementById('clientDetailVideoBody').innerHTML=rows;
+}
+function saveClientDetailModal(){
+  const name=document.getElementById('clientDetailClientName').value;
+  const p=getClientProfile(name);p.reminders=document.getElementById('clientDetailReminders').value;saveClientProfile(name,p);
+  toast('已儲存');closeClientDetailModal();renderClientProfiles();
 }
 
 function onClientFieldChange(name,field,value){const p=getClientProfile(name);p[field]=field.startsWith('social_')||field==='reminders'?value:parseInt(value)||0;saveClientProfile(name,p);}
@@ -1339,6 +1424,7 @@ function renderEditorProfiles(){
     const p=getEditorProfile(ed.name);
     const ws=p.work_status||'開工';
     const assignedVideos=(videosForStats||videos).filter(v=>v.editor===ed.name&&!FINISHED_STATUSES.includes(v.status)).length;
+    const totalCompleted=(videosForStats||videos).filter(v=>v.editor===ed.name&&FINISHED_STATUSES.includes(v.status)).length;
     const cbHtml=clientNames.map(cn=>{
       const checked=(p.suitable_clients||[]).includes(cn)?'checked':'';
       return`<label><input type="checkbox" value="${esc(cn)}" ${checked} onchange="onEditorSuitableChange('${esc(ed.name)}')"> ${esc(cn)}</label>`;
@@ -1346,6 +1432,7 @@ function renderEditorProfiles(){
     return`<div class="profile-card">
       <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${esc(ed.name)} <span class="work-status-badge ws-${ws}">${ws}</span>
         <span style="font-size:12px;font-weight:400;color:var(--text2)">進行中: ${assignedVideos} 支</span>
+        <span style="font-size:12px;font-weight:400;color:var(--success)">總完成: ${totalCompleted} 支</span>
         ${ed.archived?`<button type="button" class="btn btn-outline btn-sm editor-archive-btn" style="margin-left:auto;font-size:11px;padding:3px 8px" data-editor-name="${esc(ed.name)}" data-action="unarchive">取消典藏</button>`:`<button type="button" class="btn btn-outline btn-sm editor-archive-btn" style="margin-left:auto;font-size:11px;padding:3px 8px" data-editor-name="${esc(ed.name)}" data-action="archive">典藏</button>`}</h3>
       <div class="profile-row">
         <div class="profile-field"><label>工作狀態</label>

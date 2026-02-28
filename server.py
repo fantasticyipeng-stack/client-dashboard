@@ -358,6 +358,27 @@ def archive_video(vid):
     return jsonify({"message": "archived"})
 
 
+@app.route("/api/videos/<vid>/unarchive", methods=["POST", "PUT", "PATCH"])
+def unarchive_video(vid):
+    v = Video.query.get(vid)
+    if not v:
+        abort(404)
+    v.archived = False
+    v.updated_at = datetime.now().isoformat()
+    db.session.commit()
+    return jsonify({"message": "unarchived"})
+
+
+@app.route("/api/videos/<vid>/delete_permanent", methods=["POST", "DELETE"])
+def delete_video_permanent(vid):
+    v = Video.query.get(vid)
+    if not v:
+        abort(404)
+    db.session.delete(v)
+    db.session.commit()
+    return jsonify({"message": "deleted"})
+
+
 # ── API: Clients ──
 
 @app.route("/api/clients", methods=["GET"])
