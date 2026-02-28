@@ -192,8 +192,9 @@ textarea { resize: vertical; min-height: 50px; }
 .didi-table textarea { min-height: 32px; resize: vertical; }
 .didi-subtotal { margin-top: 10px; text-align: right; font-size: 14px; font-weight: 700; color: var(--primary); }
 
-/* ── Bottom Tab Bar (mobile) ── */
+/* ── Mobile-only elements ── */
 .bottom-nav { display: none; }
+.mobile-page-header { display: none; }
 
 @media (max-width: 900px) {
   .sidebar { width: 56px; }
@@ -211,6 +212,20 @@ textarea { resize: vertical; min-height: 50px; }
 @media (max-width: 768px) {
   .sidebar { display: none; }
   .main-content { margin-left: 0; padding-bottom: 68px; }
+
+  /* Hide gradient header on mobile; page 1 gets its own title */
+  .header { display: none; }
+  .mobile-page-header { display: flex !important; }
+
+  /* Revenue bar only shows on page-videos via JS toggle */
+  .revenue-bar { flex-direction: column; gap: 8px; padding: 12px; margin: 0 10px; align-items: stretch; border-radius: 10px; }
+  .rev-block { text-align: left; display: flex; justify-content: space-between; align-items: center; }
+  .rev-block .rev-label { font-size: 12px; margin-bottom: 0; }
+  .rev-block .rev-value { font-size: 15px !important; }
+  .rev-progress-wrap { min-width: 0; }
+  .rev-pct { font-size: 16px; min-width: auto; text-align: right; }
+
+  /* Bottom nav */
   .bottom-nav {
     display: flex; position: fixed; bottom: 0; left: 0; right: 0;
     background: var(--sidebar-bg); z-index: 100;
@@ -227,19 +242,7 @@ textarea { resize: vertical; min-height: 50px; }
   .bottom-nav a.active { color: #fff; }
   .bottom-nav a.active .bnav-icon { color: #a5b4fc; }
 
-  .header { padding: 12px 14px; }
-  .header h1 { font-size: 16px; }
-  .header-right { gap: 5px; }
-  .header-right .btn { padding: 6px 10px; font-size: 11px; }
-
-  .revenue-bar { flex-direction: column; gap: 10px; padding: 14px; margin: 8px 10px 0; align-items: stretch; }
-  .rev-block { text-align: left; display: flex; justify-content: space-between; align-items: center; }
-  .rev-block .rev-label { font-size: 12px; margin-bottom: 0; }
-  .rev-block .rev-value { font-size: 15px !important; }
-  .rev-progress-wrap { min-width: 0; }
-  .rev-pct { font-size: 16px; min-width: auto; text-align: right; }
-
-  .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 10px; }
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 8px 10px; }
   .stat-card { padding: 10px 12px; }
   .stat-card .value { font-size: 20px; }
   .stat-card .label { font-size: 11px; }
@@ -249,22 +252,33 @@ textarea { resize: vertical; min-height: 50px; }
   .ms-wrap { flex: 1; min-width: 0; }
   .ms-btn { font-size: 12px; padding: 7px 8px; }
 
+  /* Table: remove min-width for mobile, use card-like compact layout */
   .table-wrapper { padding: 0 10px 16px; }
-  table { min-width: 600px; }
+  table { min-width: 0; width: 100%; }
   thead th { padding: 6px 4px; font-size: 10px; }
-  tbody td { padding: 6px 4px; font-size: 12px; }
-  .note-cell { max-width: 80px; }
-  .actions .btn { padding: 4px 6px; font-size: 11px; }
+  tbody td { padding: 6px 4px; font-size: 11px; }
+  .note-cell { max-width: 60px; }
+  .note-cell span { -webkit-line-clamp: 1; }
+  .actions .btn { padding: 3px 5px; font-size: 10px; }
+  /* Hide less important columns on small screens */
+  .table-container th:nth-child(3),
+  .table-container td:nth-child(3),
+  .table-container th:nth-child(5),
+  .table-container td:nth-child(5),
+  .table-container th:nth-child(8),
+  .table-container td:nth-child(8) { display: none; }
 
   .page-title { padding: 14px 14px 6px; font-size: 16px; }
   .profile-grid { padding: 10px 10px 20px; grid-template-columns: 1fr; gap: 12px; }
   .profile-card { padding: 14px; }
   .profile-row { grid-template-columns: 1fr; }
 
-  .didi-section { margin: 10px 10px; padding: 14px; }
-  .didi-table { min-width: 400px; }
-  .didi-table th, .didi-table td { padding: 5px 4px; font-size: 11px; }
-  .didi-table input, .didi-table select, .didi-table textarea { font-size: 11px; padding: 4px 5px; }
+  .didi-section { margin: 10px 10px; padding: 12px; }
+  .didi-table { min-width: 0; width: 100%; }
+  .didi-table th, .didi-table td { padding: 5px 3px; font-size: 10px; }
+  .didi-table input, .didi-table select, .didi-table textarea { font-size: 11px; padding: 4px 5px; min-width: 0 !important; width: 100% !important; box-sizing: border-box; }
+  .didi-table input[type="number"] { width: 60px !important; }
+  .didi-table input[type="date"] { width: 100% !important; }
 
   .modal { max-width: 100%; margin: 0 8px; }
   .modal-body { padding: 12px 14px; }
@@ -303,6 +317,14 @@ textarea { resize: vertical; min-height: 50px; }
 
 <!-- PAGE 1: Videos -->
 <div id="page-videos" class="page active">
+  <div class="mobile-page-header page-title" style="display:none;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+    <span>影片管理</span>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" onclick="openModal()">＋ 新增</button>
+      <button class="btn btn-outline btn-sm" onclick="triggerDailyUpdate()">LINE 戰情</button>
+      <button class="btn btn-outline btn-sm" onclick="exportCSV()">匯出</button>
+    </div>
+  </div>
   <section class="stats" id="stats"></section>
   <section class="toolbar">
     <input type="text" class="search-box" id="searchInput" placeholder="搜尋客戶、編號、主題、剪輯人員..." oninput="renderTable()">
@@ -506,6 +528,8 @@ function switchPage(id, el, bnav) {
   document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active'));
   if (bnav) bnav.classList.add('active');
   else { const bn = document.querySelector(`.bottom-nav a[data-page="${id}"]`); if (bn) bn.classList.add('active'); }
+  const rb = document.getElementById('revenueBar');
+  if (rb && window.innerWidth <= 768) rb.style.display = id === 'videos' ? '' : 'none';
   if (id === 'clients') renderClientProfiles();
   if (id === 'editors') renderEditorProfiles();
   if (id === 'didi') renderDidiPage();

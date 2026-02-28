@@ -586,10 +586,19 @@ def build_daily_update():
     return "\n".join(lines)
 
 
+_daily_sent_date = None
+
 def scheduled_daily_update():
+    global _daily_sent_date
     with app.app_context():
+        today = datetime.now(TZ_TW).date()
+        if _daily_sent_date == today:
+            print("[Scheduler] Daily update already sent today, skipping")
+            return
         msg = build_daily_update()
         ok = send_line_push(msg)
+        if ok:
+            _daily_sent_date = today
         print(f"[Scheduler] Daily update sent, success={ok}")
 
 
@@ -723,11 +732,14 @@ def api_line_test():
     return jsonify({"success": ok})
 
 
-@app.route("/api/daily-update", methods=["POST"])
+@app.route("/api/daily-update", methods=["POST", "GET"])
 def api_daily_update():
-    """Manually trigger the daily LINE update."""
+    """Manually trigger the daily LINE update. GET allowed for external cron."""
+    global _daily_sent_date
     msg = build_daily_update()
     ok = send_line_push(msg)
+    if ok:
+        _daily_sent_date = datetime.now(TZ_TW).date()
     return jsonify({"success": ok, "message": msg})
 
 
@@ -773,9 +785,9 @@ _scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 _check_hour = int(os.getenv("CHECK_HOUR", "9"))
 _check_minute = int(os.getenv("CHECK_MINUTE", "0"))
 _scheduler.add_job(scheduled_overdue_check, "cron", hour=_check_hour, minute=_check_minute)
-_scheduler.add_job(scheduled_daily_update, "cron", hour=_check_hour, minute=_check_minute + 1)
+_scheduler.add_job(scheduled_daily_update, "cron", hour="9-22", minute=0)
 _scheduler.start()
-print(f"[Scheduler] Daily overdue check at {_check_hour:02d}:{_check_minute:02d}, daily update at {_check_hour:02d}:{_check_minute + 1:02d}")
+print(f"[Scheduler] Overdue check at {_check_hour:02d}:{_check_minute:02d}, daily update retries hourly 09-22")
 
 
 if __name__ == "__main__":
