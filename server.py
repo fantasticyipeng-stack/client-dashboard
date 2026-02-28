@@ -10,11 +10,12 @@ from datetime import datetime, date, timezone, timedelta
 import requests as http_requests
 from sqlalchemy import text, Integer
 from sqlalchemy.types import TypeDecorator
-from flask import Flask, request, jsonify, send_file, abort
+from flask import Flask, request, jsonify, send_file, abort, redirect, session, url_for
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
+from urllib.parse import urlencode
 
 load_dotenv()
 
@@ -23,6 +24,14 @@ load_dotenv()
 LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET", "")
 LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN", "")
 LINE_TARGET_ID = os.getenv("LINE_TARGET_ID", "")
+
+# Google 登入（Gmail）門禁
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", os.urandom(24).hex())
+ALLOWED_EMAILS = [e.strip().lower() for e in os.getenv("ALLOWED_EMAILS", "").split(",") if e.strip()]
+ALLOWED_DOMAIN = os.getenv("ALLOWED_DOMAIN", "").strip().lower()
+AUTH_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and SESSION_SECRET_KEY)
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.db")
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
@@ -40,8 +49,33 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_size": 5,
     "max_overflow": 2,
 }
-CORS(app)
+app.config["SECRET_KEY"] = SESSION_SECRET_KEY
+app.config["SESSION_COOKIE_SECURE"] = os.getenv("SESSION_COOKIE_SECURE", "true").lower() in ("1", "true", "yes")
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+CORS(app, supports_credentials=True)
 db = SQLAlchemy(app)
+
+
+def _email_allowed(email):
+    if not email:
+        return False
+    email = email.strip().lower()
+    if ALLOWED_EMAILS and email not in ALLOWED_EMAILS:
+        return False
+    if ALLOWED_DOMAIN and not email.endswith("@" + ALLOWED_DOMAIN):
+        return False
+    return True
+
+
+def _login_required():
+    """若未啟用登入或已登入則不處理；否則 redirect 到登入頁或回傳 401。"""
+    if not AUTH_ENABLED:
+        return None
+    if session.get("email"):
+        return None
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "請先登入", "login_url": "/login"}), 401
+    return redirect(url_for("login_page"))
 
 # ── LINE Bot (direct REST API, no SDK) ──
 
@@ -238,14 +272,151 @@ def seed_defaults():
 
 # ── API: Serve frontend ──
 
+LOGIN_HTML = r"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登入 - 小跟拍戰情版</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif; background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.card { background: #fff; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,.2); padding: 40px; max-width: 380px; width: 100%; text-align: center; }
+.card h1 { font-size: 20px; color: #1e293b; margin-bottom: 8px; }
+.card p { color: #64748b; font-size: 14px; margin-bottom: 24px; }
+.btn-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 12px 20px; background: #fff; border: 1px solid #dadce0; border-radius: 8px; font-size: 15px; font-weight: 500; color: #3c4043; cursor: pointer; text-decoration: none; transition: background .2s; }
+.btn-google:hover { background: #f8f9fa; }
+.btn-google svg { width: 20px; height: 20px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>小跟拍戰情版</h1>
+  <p>請使用 Google 帳號登入</p>
+  <a href="/auth/google" class="btn-google">
+    <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+    使用 Gmail 登入
+  </a>
+</div>
+</body>
+</html>
+"""
+
+
+@app.route("/login")
+def login_page():
+    if not AUTH_ENABLED:
+        return redirect(url_for("index"))
+    if session.get("email"):
+        return redirect(url_for("index"))
+    return LOGIN_HTML
+
+
+@app.route("/auth/google")
+def auth_google():
+    if not AUTH_ENABLED:
+        return redirect(url_for("index"))
+    redirect_uri = request.host_url.rstrip("/") + "/auth/callback"
+    params = {
+        "client_id": GOOGLE_CLIENT_ID,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "consent",
+    }
+    return redirect("https://accounts.google.com/o/oauth2/v2/auth?" + urlencode(params))
+
+
+@app.route("/auth/callback")
+def auth_callback():
+    if not AUTH_ENABLED:
+        return redirect(url_for("index"))
+    code = request.args.get("code")
+    if not code:
+        return redirect(url_for("login_page"))
+    redirect_uri = request.host_url.rstrip("/") + "/auth/callback"
+    try:
+        r = http_requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": redirect_uri,
+            },
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=10,
+        )
+        r.raise_for_status()
+        token = r.json().get("access_token")
+        if not token:
+            return redirect(url_for("login_page"))
+        user = http_requests.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": "Bearer " + token},
+            timeout=10,
+        )
+        user.raise_for_status()
+        data = user.json()
+        email = (data.get("email") or "").strip().lower()
+        if not _email_allowed(email):
+            return (
+                "<script>alert('此帳號沒有權限'); location.href='/login';</script>",
+                403,
+                {"Content-Type": "text/html; charset=utf-8"},
+            )
+        session["email"] = email
+        session["name"] = (data.get("name") or email).strip()
+        return redirect(url_for("index"))
+    except Exception as e:
+        print("[auth/callback] " + str(e))
+        return redirect(url_for("login_page"))
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page") if AUTH_ENABLED else url_for("index"))
+
+
+@app.before_request
+def require_login():
+    path = request.path
+    if not AUTH_ENABLED:
+        return None
+    if path in ("/login", "/logout") or path.startswith("/auth/") or path == "/logo.png":
+        return None
+    if path == "/webhook":
+        return None
+    if path == "/api/line-test" or path == "/api/daily-update":
+        return None
+    if path == "/" or path.startswith("/api/"):
+        return _login_required()
+    return None
+
+
 @app.route("/")
 def index():
+    if AUTH_ENABLED and not session.get("email"):
+        return redirect(url_for("login_page"))
     return send_file("dashboard.html")
 
 
 @app.route("/logo.png")
 def logo():
     return send_file("logo.png", mimetype="image/png")
+
+
+@app.route("/favicon.ico")
+@app.route("/apple-touch-icon.png")
+@app.route("/apple-touch-icon-precomposed.png")
+def favicon():
+    """避免瀏覽器 / LINE 一直打這些網址造成 404 log。沒有圖就回 204 No Content。"""
+    if os.path.isfile(os.path.join(os.path.dirname(__file__), "favicon.ico")):
+        return send_file("favicon.ico", mimetype="image/x-icon")
+    return "", 204
 
 
 # ── API: Batch (一次取得戰情版所需資料，減少請求數) ──

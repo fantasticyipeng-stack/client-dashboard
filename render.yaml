@@ -16,6 +16,14 @@ services:
         fromDatabase:
           name: video-dashboard-db
           property: connectionString
+      - key: SESSION_SECRET_KEY
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: ALLOWED_EMAILS
+        sync: false
       - key: LINE_CHANNEL_SECRET
         sync: false
       - key: LINE_CHANNEL_ACCESS_TOKEN
