@@ -669,30 +669,43 @@ def save_didi_software():
 
 
 # ── Overdue logic ──
+# 1. 初稿繳交時間超過今天，但還沒把狀態從「剪輯中」改成「初稿修改中」
+# 2. 影片預定上傳時間已經超過，但還沒把狀態改成「已上傳影片」
 
 def get_overdue_items():
     today = datetime.now(TZ_TW).date().isoformat()
-    return Video.query.filter(
-        Video.status.notin_(DONE_STATUSES),
-        Video.draft_date < today
+    base = Video.query.filter(text("videos.archived = 0"))
+    draft_overdue = base.filter(
+        Video.status == "剪輯中",
+        Video.draft_date < today,
     ).order_by(Video.draft_date.asc()).all()
+    upload_overdue = base.filter(
+        Video.status != "已上傳影片",
+        Video.upload_date < today,
+    ).order_by(Video.upload_date.asc()).all()
+    return draft_overdue, upload_overdue
 
 
-def build_overdue_message(items):
-    if not items:
-        return None
+def build_overdue_message(draft_overdue, upload_overdue):
     today = datetime.now(TZ_TW).date()
-    msg = f"⚠️ 短影片初稿逾期提醒（{len(items)} 筆）\n{'─' * 20}\n\n"
-    for i, d in enumerate(items, 1):
-        draft = datetime.strptime(d.draft_date, "%Y-%m-%d").date()
-        overdue_days = (today - draft).days
-        msg += f"{i}. {d.client_name}｜{d.video_id}\n"
-        msg += f"   主題：{d.topic}\n"
-        msg += f"   剪輯：{d.editor}\n"
-        msg += f"   初稿日：{d.draft_date}（已逾期 {overdue_days} 天）\n"
-        msg += f"   狀態：{d.status}\n\n"
-    msg += "請盡速處理！\n回覆「指令」查看可用操作。"
-    return msg
+    parts = []
+    if draft_overdue:
+        parts.append(f"⚠️ 初稿逾期（{len(draft_overdue)} 筆）— 初稿日已過，狀態仍為「剪輯中」\n" + "─" * 20)
+        for i, d in enumerate(draft_overdue, 1):
+            draft = datetime.strptime(d.draft_date, "%Y-%m-%d").date()
+            overdue_days = (today - draft).days
+            parts.append(f"{i}. {d.client_name}｜{d.video_id}\n   主題：{d.topic}\n   剪輯：{d.editor}\n   初稿日：{d.draft_date}（已逾期 {overdue_days} 天）")
+        parts.append("")
+    if upload_overdue:
+        parts.append(f"⚠️ 上片逾期（{len(upload_overdue)} 筆）— 預定上傳日已過，尚未改為「已上傳影片」\n" + "─" * 20)
+        for i, d in enumerate(upload_overdue, 1):
+            ud = datetime.strptime(d.upload_date, "%Y-%m-%d").date()
+            overdue_days = (today - ud).days
+            parts.append(f"{i}. {d.client_name}｜{d.video_id}\n   主題：{d.topic}\n   狀態：{d.status}\n   預定上片：{d.upload_date}（已逾期 {overdue_days} 天）")
+        parts.append("")
+    if not parts:
+        return None
+    return "\n".join(parts) + "請盡速處理！\n回覆「指令」查看可用操作。"
 
 
 def _line_headers():
@@ -770,10 +783,34 @@ def get_urgent_videos():
     deadline = (today + timedelta(days=3)).isoformat()
     today_str = today.isoformat()
     return Video.query.filter(
+        text("videos.archived = 0"),
         Video.status.notin_(['已完成', '已上傳雲端', '已上傳影片']),
         Video.upload_date <= deadline,
         Video.upload_date >= today_str,
     ).order_by(Video.upload_date.asc()).all()
+
+
+def get_today_upload_videos():
+    """今天要上傳的影片：預定上傳日＝今天，且尚未改為已上傳影片。"""
+    today = datetime.now(TZ_TW).date().isoformat()
+    return Video.query.filter(
+        text("videos.archived = 0"),
+        Video.upload_date == today,
+        Video.status != "已上傳影片",
+    ).order_by(Video.client_name.asc()).all()
+
+
+def build_today_upload_message():
+    items = get_today_upload_videos()
+    today = datetime.now(TZ_TW).date().isoformat()
+    lines = [f"📅 今天要上傳的影片（{today}）", "─" * 20, ""]
+    if not items:
+        lines.append("目前沒有排定今天上傳的影片。")
+    else:
+        lines.append(f"共 {len(items)} 支：")
+        for v in items:
+            lines.append(f"  • {v.client_name}｜{v.video_id}｜{v.topic}｜{v.status}")
+    return "\n".join(lines)
 
 
 def build_daily_update():
@@ -826,15 +863,29 @@ def scheduled_daily_update():
             print(f"[Scheduler] Daily update error: {e}")
 
 
+def scheduled_today_upload():
+    """每天 16:00 傳送「今天要上傳的影片」"""
+    with app.app_context():
+        try:
+            db.session.rollback()
+            msg = build_today_upload_message()
+            ok = send_line_push(msg)
+            print(f"[Scheduler] Today's upload list sent at 16:00, success={ok}")
+        except Exception as e:
+            db.session.rollback()
+            print(f"[Scheduler] Today upload error: {e}")
+
+
 def scheduled_overdue_check():
     with app.app_context():
         try:
             db.session.rollback()
-            items = get_overdue_items()
-            msg = build_overdue_message(items)
+            draft_overdue, upload_overdue = get_overdue_items()
+            msg = build_overdue_message(draft_overdue, upload_overdue)
             if msg:
+                total = len(draft_overdue) + len(upload_overdue)
                 ok = send_line_push(msg)
-                print(f"[Scheduler] Sent overdue alert: {len(items)} items, success={ok}")
+                print(f"[Scheduler] Sent overdue alert: {total} items, success={ok}")
             else:
                 print("[Scheduler] No overdue items.")
         except Exception as e:
@@ -844,14 +895,15 @@ def scheduled_overdue_check():
 
 @app.route("/api/check-overdue", methods=["POST"])
 def api_check_overdue():
-    items = get_overdue_items()
-    msg = build_overdue_message(items)
+    draft_overdue, upload_overdue = get_overdue_items()
+    msg = build_overdue_message(draft_overdue, upload_overdue)
+    total = len(draft_overdue) + len(upload_overdue)
     if not msg:
         return jsonify({"message": "沒有逾期任務", "count": 0, "sent": False})
     ok = send_line_push(msg)
     return jsonify({
-        "message": f"已發送 {len(items)} 筆逾期提醒" if ok else "LINE 未設定或傳送失敗",
-        "count": len(items),
+        "message": f"已發送 {total} 筆逾期提醒" if ok else "LINE 未設定或傳送失敗",
+        "count": total,
         "sent": ok,
     })
 
@@ -945,11 +997,12 @@ def handle_line_command(reply_token, text):
         msg = build_daily_update()
         reply_line(reply_token, msg)
     elif text == "逾期":
-        items = get_overdue_items()
-        if not items:
+        draft_overdue, upload_overdue = get_overdue_items()
+        msg = build_overdue_message(draft_overdue, upload_overdue)
+        if not msg:
             reply_line(reply_token, "目前沒有逾期任務 👍")
         else:
-            reply_line(reply_token, build_overdue_message(items))
+            reply_line(reply_token, msg)
     else:
         msg = build_daily_update()
         reply_line(reply_token, msg)
@@ -1043,8 +1096,10 @@ _scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 _check_hour = int(os.getenv("CHECK_HOUR", "9"))
 _check_minute = int(os.getenv("CHECK_MINUTE", "0"))
 _scheduler.add_job(scheduled_overdue_check, "cron", hour=_check_hour, minute=_check_minute)
-# LINE 每日戰情：僅 08:00, 12:00, 16:00, 20:00 發送（每 4 小時）
-_scheduler.add_job(scheduled_daily_update, "cron", hour="8,12,16,20", minute=0)
+# LINE 每日戰情：08:00, 12:00, 20:00 發送
+_scheduler.add_job(scheduled_daily_update, "cron", hour="8,12,20", minute=0)
+# 每天 16:00 傳送「今天要上傳的影片」
+_scheduler.add_job(scheduled_today_upload, "cron", hour=16, minute=0)
 
 
 with app.app_context():
@@ -1058,7 +1113,7 @@ with app.app_context():
 
 
 _scheduler.start()
-print(f"[Scheduler] Overdue check at {_check_hour:02d}:{_check_minute:02d}, daily LINE at 08:00, 12:00, 16:00, 20:00")
+print("[Scheduler] Overdue check at {:02d}:{:02d}, daily LINE at 08:00, 12:00, 20:00, today's upload at 16:00".format(_check_hour, _check_minute))
 
 
 if __name__ == "__main__":

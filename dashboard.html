@@ -310,10 +310,10 @@ textarea { resize: vertical; min-height: 50px; }
   .bottom-nav a.active { color: #fff; }
   .bottom-nav a.active .bnav-icon { color: #a5b4fc; }
 
-  .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 8px 10px; }
-  .stat-card { padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: nowrap; }
+  .stats { display: flex; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 8px; padding: 8px 10px; scroll-snap-type: x proximity; }
+  .stats .stat-card { flex: 0 0 auto; min-width: 100px; scroll-snap-align: start; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: nowrap; }
   .stat-card .label { font-size: 11px; margin-bottom: 0; flex-shrink: 0; }
-  .stat-card .value { font-size: 18px; }
+  .stat-card .value { font-size: 16px; }
   .stat-card .label + .value { margin-left: auto; }
 
   .toolbar { padding: 0 10px 10px; gap: 6px; }
@@ -321,7 +321,8 @@ textarea { resize: vertical; min-height: 50px; }
   .ms-wrap { flex: 1; min-width: 0; }
   .ms-btn { font-size: 12px; padding: 7px 8px; }
 
-  .table-wrapper { padding: 0 10px 16px; }
+  /* 僅最下方影片表單可左右滑動，不影響整頁 */
+  .table-wrapper { padding: 0 10px 16px; max-width: 100%; overflow: visible; }
   .table-container { -webkit-overflow-scrolling: touch; overflow-x: auto; overflow-y: visible; max-width: 100%; }
   .table-container table { min-width: 720px; width: 100%; table-layout: auto; }
   table thead th:nth-child(1), table tbody td:nth-child(1) { min-width: 70px; }
