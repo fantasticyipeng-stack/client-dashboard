@@ -157,9 +157,13 @@ textarea { resize: vertical; min-height: 50px; }
 
 .profile-grid { padding: 16px 32px 32px; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
 .profile-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; overflow: hidden; }
-.profile-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
-.client-budget-input { width: 72px; font-size: 12px; color: var(--text2); padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; margin-left: 4px; }
+.profile-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.profile-card h3 > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profile-card h3 .client-budget-wrap { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.client-budget-input { width: 56px; font-size: 12px; color: var(--text2); padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; }
 .client-budget-input:focus { border-color: var(--primary); color: var(--text); outline: none; }
+.profile-card h3 .client-budget-unit { font-size: 12px; font-weight: 400; color: var(--text2); white-space: nowrap; }
+.profile-card h3 .client-delete-btn { margin-left: auto; flex-shrink: 0; }
 .profile-field { margin-bottom: 12px; }
 .profile-field label { display: block; font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
 .profile-field input, .profile-field select, .profile-field textarea { font-size: 13px; padding: 7px 10px; }
@@ -171,6 +175,7 @@ textarea { resize: vertical; min-height: 50px; }
 .profile-mini-table td { padding: 5px 6px; border-bottom: 1px solid var(--border); word-break: break-word; max-width: 120px; }
 .profile-mini-table td:last-child { white-space: nowrap; }
 .profile-mini-table input { padding: 4px 6px; font-size: 12px; width: 70px; }
+.profile-mini-table input.view-count-input { color: var(--text2); }
 
 .work-status-badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; }
 .ws-開工 { background: #d1fae5; color: #065f46; }
@@ -216,11 +221,15 @@ textarea { resize: vertical; min-height: 50px; }
 .didi-compact-row .dm-fee { font-weight: 600; color: var(--primary); white-space: nowrap; }
 .didi-compact-row .dm-actions { display: flex; gap: 4px; margin-left: auto; }
 @media (min-width: 769px) {
-  .didi-media-compact { display: none !important; }
+  .didi-media-compact, .didi-speech-compact, .didi-software-compact { display: none !important; }
 }
 @media (max-width: 768px) {
   .didi-media-compact { display: block !important; }
   .didi-media-table-cards { display: none !important; }
+  .didi-speech-compact { display: block !important; }
+  .didi-speech-table-cards { display: none !important; }
+  .didi-software-compact { display: block !important; }
+  .didi-software-table-cards { display: none !important; }
 }
 
 /* ── Mobile-only elements ── */
@@ -541,6 +550,38 @@ textarea { resize: vertical; min-height: 50px; }
   </div>
 </div>
 
+<!-- Didi Speech Add/Edit Modal (mobile) -->
+<div class="modal-overlay" id="didiSpeechModal">
+  <div class="modal">
+    <div class="modal-header"><h2 id="didiSpeechModalTitle">新增演講/講課紀錄</h2><button class="modal-close" onclick="closeDidiSpeechModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="didiSpeechEditId">
+      <div class="form-group"><label>單位</label><input type="text" id="dsOrg" placeholder="單位"></div>
+      <div class="form-group"><label>日期</label><input type="date" id="dsDate"></div>
+      <div class="form-group"><label>地點</label><input type="text" id="dsLocation" placeholder="地點"></div>
+      <div class="form-group"><label>講題</label><input type="text" id="dsTopic" placeholder="講題"></div>
+      <div class="form-group"><label>照片連結</label><input type="url" id="dsPhotoUrl" placeholder="https://..."></div>
+      <div class="form-group"><label>反應 & 可優化</label><textarea id="dsFeedback" rows="2" placeholder="選填"></textarea></div>
+      <div class="form-group"><label>講師費</label><input type="number" id="dsSpeakerFee" min="0" value="0"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeDidiSpeechModal()">取消</button><button class="btn btn-primary" onclick="submitDidiSpeechModal()">儲存</button></div>
+  </div>
+</div>
+
+<!-- Didi Software Add/Edit Modal (mobile) -->
+<div class="modal-overlay" id="didiSoftwareModal">
+  <div class="modal">
+    <div class="modal-header"><h2 id="didiSoftwareModalTitle">新增軟體收入</h2><button class="modal-close" onclick="closeDidiSoftwareModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="didiSoftwareEditId">
+      <div class="form-group"><label>客戶名稱</label><select id="dswClient"><option value="">請選擇</option></select></div>
+      <div class="form-group"><label>月費</label><input type="number" id="dswMonthlyFee" min="0" value="0"></div>
+      <div class="form-group"><label>訂購月份</label><input type="number" id="dswMonths" min="0" value="0"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeDidiSoftwareModal()">取消</button><button class="btn btn-primary" onclick="submitDidiSoftwareModal()">儲存</button></div>
+  </div>
+</div>
+
 <div class="toast-container" id="toastContainer"></div>
 </div>
 
@@ -569,6 +610,7 @@ function fmtDate(d){if(!d)return'-';const p=d.split('-');return`${p[0]}/${p[1]}/
 function daysUntil(ds){if(!ds)return Infinity;const t=new Date();t.setHours(0,0,0,0);const d=new Date(ds);d.setHours(0,0,0,0);return Math.ceil((d-t)/864e5);}
 function genId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7);}
 function fmtMoney(n){return n.toLocaleString('zh-TW');}
+function fmtNum(n){return (parseInt(n,10)||0).toLocaleString('zh-TW');}
 
 // ── Page switching ──
 function switchPage(id, el, bnav) {
@@ -840,7 +882,7 @@ function viewDetail(id){
     ['狀態',`<span class="status-badge status-${d.status}">${d.status}</span>`],
     ['初稿繳交',fmtDate(d.draft_date)],['預計上片',fmtDate(d.upload_date)],['剪輯人員',esc(d.editor)],
     ['素材連結',lnk(d.material_link,'開啟連結')],['參考腳本',lnk(d.script_link,'開啟連結')],
-    ['觀看數',d.view_count||'-'],
+    ['觀看數', fmtNum(d.view_count)||'0'],
     ['注意事項',esc(d.notes)||'-'],['備註',esc(d.remarks)||'-'],
     ['建立時間',d.created_at?new Date(d.created_at).toLocaleString('zh-TW'):'-'],
     ['更新時間',d.updated_at?new Date(d.updated_at).toLocaleString('zh-TW'):'-'],
@@ -905,7 +947,7 @@ function renderClientProfiles(){
     const budget=p.budget_per_video||0;
     const videoRows=clientVideos.length?clientVideos.map(v=>`<tr>
       <td>${esc(v.video_id)}</td><td>${esc(v.topic)}</td><td>${fmtDate(v.upload_date)}</td>
-      <td><input type="number" value="${v.view_count||0}" min="0" onchange="updateVideoViewCount('${v.id}',this.value)"></td>
+      <td><input type="number" value="${v.view_count||0}" min="0" onchange="updateVideoViewCount('${v.id}',this.value)" class="view-count-input"></td>
     </tr>`).join(''):'<tr><td colspan="4" style="text-align:center;color:var(--text2)">尚無已上傳影片</td></tr>';
 
     const socialFields = [['social_ig','IG'],['social_threads','Threads'],['social_tiktok','TikTok'],['social_fb','FB']];
@@ -919,8 +961,7 @@ function renderClientProfiles(){
       </div>`).join('');
 
     return`<div class="profile-card">
-      <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${esc(name)} <input type="number" class="client-budget-input" min="0" value="${p.budget_per_video||0}" placeholder="0" onchange="onClientFieldChange('${esc(name)}','budget_per_video',this.value)" title="每部金額"> <span style="font-size:12px;font-weight:400;color:var(--text2)">元/支</span>
-        <button class="btn btn-danger btn-sm" style="margin-left:auto;font-size:11px;padding:3px 8px" onclick="confirmDeleteClient('${esc(name)}')">刪除客戶</button></h3>
+      <h3><span>${esc(name)}</span><span class="client-budget-wrap"><input type="number" class="client-budget-input" min="0" value="${p.budget_per_video||0}" placeholder="0" onchange="onClientFieldChange('${esc(name)}','budget_per_video',this.value)" title="每部金額"><span class="client-budget-unit">元/支</span></span><button class="btn btn-danger btn-sm client-delete-btn" style="font-size:11px;padding:3px 8px" onclick="confirmDeleteClient('${esc(name)}')">刪除客戶</button></h3>
       <div class="profile-row">
         <div class="profile-field"><label>目前粉絲數</label><input type="number" value="${p.current_followers||0}" min="0" onchange="onClientFieldChange('${esc(name)}','current_followers',this.value)"></div>
         <div class="profile-field"><label>目標粉絲數</label><input type="number" value="${p.target_followers||0}" min="0" onchange="onClientFieldChange('${esc(name)}','target_followers',this.value)"></div>
@@ -1133,7 +1174,7 @@ function renderDidiMedia(){
   </div>`).join('');
   const compactRows=didiMedia.map(r=>`<div class="didi-compact-row">
     <span class="dm-title">${esc(r.title)||'—'}</span>
-    <span class="dm-num">觀看 ${r.view_count||0}</span>
+    <span class="dm-num">觀看 ${fmtNum(r.view_count)}</span>
     <span class="dm-fee">$${fmtMoney(r.sponsor_fee||0)}</span>
     <div class="dm-actions"><button class="btn btn-outline btn-sm" onclick="openDidiMediaModal('${r.id}')">編輯</button><button class="btn btn-danger btn-sm" onclick="delDidiMedia('${r.id}')">刪除</button></div>
   </div>`).join('');
@@ -1147,6 +1188,7 @@ function renderDidiMedia(){
 
 // ── 演講/講課紀錄 ──
 function addDidiSpeech(){
+  if(window.innerWidth<=768){ openDidiSpeechModal(); return; }
   didiSpeech.push({id:genId(),org:'',date:'',location:'',topic:'',photo_url:'',feedback:'',speaker_fee:0});
   saveDidiData('speech');renderDidiSpeech();
 }
@@ -1156,6 +1198,47 @@ function onDidiSpeechChange(id,field,value){
   r[field]=(field==='speaker_fee')?parseFloat(value)||0:value;
   saveDidiData('speech');
   if(field==='speaker_fee')renderRevenue();
+}
+function openDidiSpeechModal(editId){
+  const id=editId||'';
+  document.getElementById('didiSpeechEditId').value=id;
+  document.getElementById('didiSpeechModalTitle').textContent=id?'編輯演講/講課紀錄':'新增演講/講課紀錄';
+  if(id){
+    const r=didiSpeech.find(x=>x.id===id);if(!r)return;
+    document.getElementById('dsOrg').value=r.org||'';
+    document.getElementById('dsDate').value=r.date||'';
+    document.getElementById('dsLocation').value=r.location||'';
+    document.getElementById('dsTopic').value=r.topic||'';
+    document.getElementById('dsPhotoUrl').value=r.photo_url||'';
+    document.getElementById('dsFeedback').value=r.feedback||'';
+    document.getElementById('dsSpeakerFee').value=r.speaker_fee||0;
+  }else{
+    document.getElementById('dsOrg').value='';
+    document.getElementById('dsDate').value='';
+    document.getElementById('dsLocation').value='';
+    document.getElementById('dsTopic').value='';
+    document.getElementById('dsPhotoUrl').value='';
+    document.getElementById('dsFeedback').value='';
+    document.getElementById('dsSpeakerFee').value=0;
+  }
+  document.getElementById('didiSpeechModal').classList.add('active');
+}
+function closeDidiSpeechModal(){ document.getElementById('didiSpeechModal').classList.remove('active'); }
+function submitDidiSpeechModal(){
+  const id=document.getElementById('didiSpeechEditId').value;
+  const org=document.getElementById('dsOrg').value.trim();
+  const date=document.getElementById('dsDate').value;
+  const location=document.getElementById('dsLocation').value.trim();
+  const topic=document.getElementById('dsTopic').value.trim();
+  const photo_url=document.getElementById('dsPhotoUrl').value.trim();
+  const feedback=document.getElementById('dsFeedback').value.trim();
+  const speaker_fee=parseFloat(document.getElementById('dsSpeakerFee').value)||0;
+  if(id){
+    const r=didiSpeech.find(x=>x.id===id);if(r){ r.org=org;r.date=date;r.location=location;r.topic=topic;r.photo_url=photo_url;r.feedback=feedback;r.speaker_fee=speaker_fee; }
+  }else{
+    didiSpeech.push({id:genId(),org,date,location,topic,photo_url,feedback,speaker_fee});
+  }
+  saveDidiData('speech');renderDidiSpeech();renderRevenue();closeDidiSpeechModal();
 }
 function renderDidiSpeech(){
   const el=document.getElementById('didiSpeechSection');
@@ -1181,15 +1264,23 @@ function renderDidiSpeech(){
     <div class="didi-card-field"><label>講師費</label><input type="number" value="${r.speaker_fee||0}" min="0" onchange="onDidiSpeechChange('${r.id}','speaker_fee',this.value)"></div>
     <div class="didi-card-actions"><button class="btn btn-danger btn-sm" onclick="delDidiSpeech('${r.id}')">刪除</button></div>
   </div>`).join('');
+  const compactRows=didiSpeech.map(r=>`<div class="didi-compact-row">
+    <span class="dm-title">${esc(r.org)||'—'}</span>
+    <span class="dm-num">${fmtDate(r.date)||'—'}</span>
+    <span class="dm-fee">$${fmtMoney(r.speaker_fee||0)}</span>
+    <div class="dm-actions"><button class="btn btn-outline btn-sm" onclick="openDidiSpeechModal('${r.id}')">編輯</button><button class="btn btn-danger btn-sm" onclick="delDidiSpeech('${r.id}')">刪除</button></div>
+  </div>`).join('');
   el.innerHTML=`<h3>演講 / 講課紀錄 <button class="btn btn-primary btn-sm" onclick="addDidiSpeech()">＋ 新增</button></h3>
     <div class="didi-table-wrap"><table class="didi-table"><thead><tr><th>單位</th><th>日期</th><th>地點</th><th>講題</th><th>照片</th><th>反應 & 可優化</th><th>講師費</th><th></th></tr></thead>
     <tbody>${rows||'<tr><td colspan="8" style="text-align:center;color:var(--text2)">尚無記錄</td></tr>'}</tbody></table></div>
-    <div class="didi-cards">${cards||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
+    <div class="didi-speech-table-cards didi-cards">${cards||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
+    <div class="didi-speech-compact" style="display:none">${compactRows||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
     <div class="didi-subtotal">講師費小計：$${fmtMoney(subtotal)}</div>`;
 }
 
 // ── 軟體收入 ──
 function addDidiSoftware(){
+  if(window.innerWidth<=768){ openDidiSoftwareModal(); return; }
   didiSoftware.push({id:genId(),client_name:'',monthly_fee:0,months:0});
   saveDidiData('software');renderDidiSoftware();
 }
@@ -1198,6 +1289,37 @@ function onDidiSoftwareChange(id,field,value){
   const r=didiSoftware.find(x=>x.id===id);if(!r)return;
   r[field]=(field==='monthly_fee'||field==='months')?parseFloat(value)||0:value;
   saveDidiData('software');renderDidiSoftware();renderRevenue();
+}
+function openDidiSoftwareModal(editId){
+  const id=editId||'';
+  document.getElementById('didiSoftwareEditId').value=id;
+  document.getElementById('didiSoftwareModalTitle').textContent=id?'編輯軟體收入':'新增軟體收入';
+  const opts=clients.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  document.getElementById('dswClient').innerHTML='<option value="">請選擇</option>'+opts;
+  if(id){
+    const r=didiSoftware.find(x=>x.id===id);if(!r)return;
+    document.getElementById('dswClient').value=r.client_name||'';
+    document.getElementById('dswMonthlyFee').value=r.monthly_fee||0;
+    document.getElementById('dswMonths').value=r.months||0;
+  }else{
+    document.getElementById('dswClient').value='';
+    document.getElementById('dswMonthlyFee').value=0;
+    document.getElementById('dswMonths').value=0;
+  }
+  document.getElementById('didiSoftwareModal').classList.add('active');
+}
+function closeDidiSoftwareModal(){ document.getElementById('didiSoftwareModal').classList.remove('active'); }
+function submitDidiSoftwareModal(){
+  const id=document.getElementById('didiSoftwareEditId').value;
+  const client_name=document.getElementById('dswClient').value.trim();
+  const monthly_fee=parseFloat(document.getElementById('dswMonthlyFee').value)||0;
+  const months=parseInt(document.getElementById('dswMonths').value,10)||0;
+  if(id){
+    const r=didiSoftware.find(x=>x.id===id);if(r){ r.client_name=client_name;r.monthly_fee=monthly_fee;r.months=months; }
+  }else{
+    didiSoftware.push({id:genId(),client_name,monthly_fee,months});
+  }
+  saveDidiData('software');renderDidiSoftware();renderRevenue();closeDidiSoftwareModal();
 }
 function renderDidiSoftware(){
   const el=document.getElementById('didiSoftwareSection');
@@ -1226,10 +1348,20 @@ function renderDidiSoftware(){
     <div class="didi-card-actions"><button class="btn btn-danger btn-sm" onclick="delDidiSoftware('${r.id}')">刪除</button></div>
   </div>`;
   }).join('');
+  const compactRows=didiSoftware.map(r=>{
+    const sub=(parseFloat(r.monthly_fee)||0)*(parseInt(r.months)||0);
+    return`<div class="didi-compact-row">
+    <span class="dm-title">${esc(r.client_name)||'—'}</span>
+    <span class="dm-num">${r.months||0} 月</span>
+    <span class="dm-fee">$${fmtMoney(sub)}</span>
+    <div class="dm-actions"><button class="btn btn-outline btn-sm" onclick="openDidiSoftwareModal('${r.id}')">編輯</button><button class="btn btn-danger btn-sm" onclick="delDidiSoftware('${r.id}')">刪除</button></div>
+  </div>`;
+  }).join('');
   el.innerHTML=`<h3>軟體收入 <button class="btn btn-primary btn-sm" onclick="addDidiSoftware()">＋ 新增</button></h3>
     <div class="didi-table-wrap"><table class="didi-table"><thead><tr><th>客戶名稱</th><th>月費</th><th>訂購月份</th><th>小計</th><th></th></tr></thead>
     <tbody>${rows||'<tr><td colspan="5" style="text-align:center;color:var(--text2)">尚無記錄</td></tr>'}</tbody></table></div>
-    <div class="didi-cards">${cards||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
+    <div class="didi-software-table-cards didi-cards">${cards||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
+    <div class="didi-software-compact" style="display:none">${compactRows||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
     <div class="didi-subtotal">軟體收入小計：$${fmtMoney(grandTotal)}</div>`;
 }
 
