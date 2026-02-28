@@ -70,28 +70,43 @@ class Video(db.Model):
     material_link = db.Column(db.Text, default="")
     script_link = db.Column(db.Text, default="")
     view_count = db.Column(db.Integer, default=0)
+    platform_views = db.Column(db.Text, default="[]")  # JSON: [{link, platform, view_count}, ...]
     notes = db.Column(db.Text, default="")
     remarks = db.Column(db.Text, default="")
     created_at = db.Column(db.String(30), nullable=False)
     updated_at = db.Column(db.String(30), nullable=False)
+    archived = db.Column(db.Boolean, default=False)
 
     def to_dict(self):
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        d = {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        return d
 
 
 class Client(db.Model):
     __tablename__ = "clients"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
+    archived = db.Column(db.Boolean, default=False)
+    archive_reason = db.Column(db.String(20), default="")
 
     def to_dict(self):
-        return {"id": self.id, "name": self.name}
+        return {"id": self.id, "name": self.name, "archived": self.archived, "archive_reason": self.archive_reason or ""}
 
 
 class Editor(db.Model):
     __tablename__ = "editors"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
+    archived = db.Column(db.Boolean, default=False)
+
+    def to_dict(self):
+        return {"id": self.id, "name": self.name, "archived": self.archived}
+
+
+class Staff(db.Model):
+    __tablename__ = "staff"
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
 
     def to_dict(self):
         return {"id": self.id, "name": self.name}
@@ -111,6 +126,8 @@ class ClientProfile(db.Model):
     social_fb = db.Column(db.Text, default="")
     social_line_voom = db.Column(db.Text, default="")
     social_youtube = db.Column(db.Text, default="")
+    account_manager = db.Column(db.String(100), default="")
+    pm = db.Column(db.String(100), default="")
 
     def to_dict(self):
         return {
@@ -124,6 +141,8 @@ class ClientProfile(db.Model):
             "social_fb": self.social_fb or "",
             "social_line_voom": self.social_line_voom or "",
             "social_youtube": self.social_youtube or "",
+            "account_manager": self.account_manager or "",
+            "pm": self.pm or "",
         }
 
 
@@ -185,6 +204,8 @@ class DidiSoftware(db.Model):
     client_name = db.Column(db.String(200), default="")
     monthly_fee = db.Column(db.Float, default=0)
     months = db.Column(db.Integer, default=0)
+    status = db.Column(db.String(20), default="訂閱中")  # 訂閱中 / 已結束
+    start_date = db.Column(db.String(10), default="")
 
     def to_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -212,11 +233,50 @@ def logo():
     return send_file("logo.png", mimetype="image/png")
 
 
+# ── API: Batch (一次取得戰情版所需資料，減少請求數) ──
+
+@app.route("/api/dashboard", methods=["GET"])
+def get_dashboard():
+    """Single request that returns videos, clients, editors, profiles, staff, didi data."""
+    videos_active = Video.query.filter(Video.archived == False).order_by(Video.draft_date.asc()).all()
+    videos_archived = Video.query.filter(Video.archived == True).order_by(Video.draft_date.asc()).all()
+    clients_active = Client.query.filter(Client.archived == False).order_by(Client.id).all()
+    clients_archived = Client.query.filter(Client.archived == True).order_by(Client.id).all()
+    editors_active = Editor.query.filter(Editor.archived == False).order_by(Editor.id).all()
+    editors_archived = Editor.query.filter(Editor.archived == True).order_by(Editor.id).all()
+    client_profiles_rows = ClientProfile.query.all()
+    editor_profiles_rows = EditorProfile.query.all()
+    staff_rows = Staff.query.order_by(Staff.id).all()
+    didi_media_rows = DidiMedia.query.all()
+    didi_speech_rows = DidiSpeech.query.all()
+    didi_software_rows = DidiSoftware.query.all()
+    return jsonify({
+        "videos": [r.to_dict() for r in videos_active],
+        "videos_archived": [r.to_dict() for r in videos_archived],
+        "clients": [r.to_dict() for r in clients_active],
+        "archived_clients": [r.to_dict() for r in clients_archived],
+        "editors": [r.to_dict() for r in editors_active],
+        "archived_editors": [r.to_dict() for r in editors_archived],
+        "client_profiles": {r.name: r.to_dict() for r in client_profiles_rows},
+        "editor_profiles": {r.name: r.to_dict() for r in editor_profiles_rows},
+        "staff": [r.to_dict() for r in staff_rows],
+        "didi_media": [r.to_dict() for r in didi_media_rows],
+        "didi_speech": [r.to_dict() for r in didi_speech_rows],
+        "didi_software": [r.to_dict() for r in didi_software_rows],
+    })
+
+
 # ── API: Videos ──
 
 @app.route("/api/videos", methods=["GET"])
 def list_videos():
-    rows = Video.query.order_by(Video.draft_date.asc()).all()
+    show_archived = request.args.get("archived") == "1"
+    q = Video.query
+    if show_archived:
+        q = q.filter(Video.archived == True)
+    else:
+        q = q.filter(Video.archived == False)
+    rows = q.order_by(Video.draft_date.asc()).all()
     return jsonify([r.to_dict() for r in rows])
 
 
@@ -236,6 +296,7 @@ def create_video():
         material_link=d.get("material_link", ""),
         script_link=d.get("script_link", ""),
         view_count=d.get("view_count", 0),
+        platform_views=_json.dumps(d.get("platform_views") or []),
         notes=d.get("notes", ""),
         remarks=d.get("remarks", ""),
         created_at=now,
@@ -253,9 +314,12 @@ def update_video(vid):
         abort(404)
     d = request.json
     for key in ["client_name", "video_id", "topic", "draft_date", "upload_date",
-                 "editor", "status", "material_link", "script_link", "view_count", "notes", "remarks"]:
+                 "editor", "status", "material_link", "script_link", "view_count", "notes", "remarks", "archived"]:
         if key in d:
             setattr(v, key, d[key])
+    if "platform_views" in d:
+        pv = d["platform_views"]
+        v.platform_views = _json.dumps(pv) if isinstance(pv, list) else (pv or "[]")
     v.updated_at = datetime.now().isoformat()
     db.session.commit()
     return jsonify({"message": "updated"})
@@ -265,9 +329,21 @@ def update_video(vid):
 def delete_video(vid):
     v = Video.query.get(vid)
     if v:
-        db.session.delete(v)
+        v.archived = True
+        v.updated_at = datetime.now().isoformat()
         db.session.commit()
-    return jsonify({"message": "deleted"})
+    return jsonify({"message": "archived"})
+
+
+@app.route("/api/videos/<vid>/archive", methods=["POST", "PUT", "PATCH"])
+def archive_video(vid):
+    v = Video.query.get(vid)
+    if not v:
+        abort(404)
+    v.archived = True
+    v.updated_at = datetime.now().isoformat()
+    db.session.commit()
+    return jsonify({"message": "archived"})
 
 
 # ── API: Clients ──
@@ -299,11 +375,31 @@ def delete_client(cid):
     return jsonify({"message": "deleted"})
 
 
+@app.route("/api/clients/<int:cid>/archive", methods=["POST"])
+def archive_client(cid):
+    c = Client.query.get(cid)
+    if not c:
+        abort(404)
+    reason = (request.json or {}).get("reason", "").strip()
+    if reason not in ("結案", "失敗"):
+        return jsonify({"error": "reason 須為「結案」或「失敗」"}), 400
+    c.archived = True
+    c.archive_reason = reason
+    db.session.commit()
+    return jsonify({"message": "archived"})
+
+
 # ── API: Editors ──
 
 @app.route("/api/editors", methods=["GET"])
 def list_editors():
-    rows = Editor.query.order_by(Editor.id).all()
+    show_archived = request.args.get("archived") == "1"
+    q = Editor.query
+    if show_archived:
+        q = q.filter(Editor.archived == True)
+    else:
+        q = q.filter(Editor.archived == False)
+    rows = q.order_by(Editor.id).all()
     return jsonify([r.to_dict() for r in rows])
 
 
@@ -323,9 +419,44 @@ def add_editor():
 def delete_editor(eid):
     e = Editor.query.get(eid)
     if e:
-        db.session.delete(e)
+        e.archived = True
         db.session.commit()
-    return jsonify({"message": "deleted"})
+    return jsonify({"message": "archived"})
+
+
+@app.route("/api/editors/<int:eid>/archive", methods=["POST"])
+def archive_editor(eid):
+    e = Editor.query.get(eid)
+    if not e:
+        abort(404)
+    e.archived = True
+    db.session.commit()
+    return jsonify({"message": "archived"})
+
+
+# ── API: Staff (負責業務/PM 名單) ──
+
+DEFAULT_STAFF_NAMES = ["范以芃", "葉思宏"]
+
+
+@app.route("/api/staff", methods=["GET"])
+def list_staff():
+    rows = Staff.query.order_by(Staff.id).all()
+    return jsonify([r.to_dict() for r in rows])
+
+
+@app.route("/api/staff", methods=["POST"])
+def add_staff():
+    name = (request.json or {}).get("name", "").strip()
+    if not name:
+        return jsonify({"error": "名稱不可為空"}), 400
+    existing = Staff.query.filter_by(name=name).first()
+    if existing:
+        return jsonify(existing.to_dict()), 201
+    row = Staff(name=name)
+    db.session.add(row)
+    db.session.commit()
+    return jsonify({"id": row.id, "name": row.name}), 201
 
 
 # ── API: Client Profiles ──
@@ -356,6 +487,8 @@ def save_client_profile():
     row.social_fb = d.get("social_fb", "")
     row.social_line_voom = d.get("social_line_voom", "")
     row.social_youtube = d.get("social_youtube", "")
+    row.account_manager = d.get("account_manager", "") or ""
+    row.pm = d.get("pm", "") or ""
     db.session.commit()
     return jsonify({"message": "saved"})
 
@@ -466,6 +599,8 @@ def save_didi_software():
             client_name=d.get("client_name", ""),
             monthly_fee=d.get("monthly_fee", 0),
             months=d.get("months", 0),
+            status=d.get("status", "訂閱中"),
+            start_date=d.get("start_date", ""),
         ))
     db.session.commit()
     return jsonify({"message": "saved"})
@@ -545,7 +680,16 @@ def calc_total_revenue():
             continue
         price = CLIENT_PRICES.get(v.client_name, 0)
         if price == -1:
-            if (v.view_count or 0) >= 5500:
+            # 橙果創意: IG 觀看數破 5500 才算 5500 元
+            ig_views = 0
+            try:
+                pv = _json.loads(v.platform_views or "[]")
+                for row in pv:
+                    if isinstance(row, dict) and row.get("platform") == "IG":
+                        ig_views += int(row.get("view_count") or 0)
+            except Exception:
+                ig_views = v.view_count or 0
+            if ig_views >= 5500:
                 client_rev += 5500
         elif price > 0:
             client_rev += price
@@ -779,7 +923,25 @@ def migrate_db():
             cols = [c["name"] for c in inspector.get_columns("videos")]
             if "view_count" not in cols:
                 db.session.execute(text("ALTER TABLE videos ADD COLUMN view_count INTEGER DEFAULT 0"))
-                db.session.commit()
+            if "archived" not in cols:
+                db.session.execute(text("ALTER TABLE videos ADD COLUMN archived INTEGER DEFAULT 0"))
+            if "platform_views" not in cols:
+                db.session.execute(text("ALTER TABLE videos ADD COLUMN platform_views TEXT DEFAULT '[]'"))
+            db.session.commit()
+
+        if "clients" in tables:
+            cols = [c["name"] for c in inspector.get_columns("clients")]
+            if "archived" not in cols:
+                db.session.execute(text("ALTER TABLE clients ADD COLUMN archived INTEGER DEFAULT 0"))
+            if "archive_reason" not in cols:
+                db.session.execute(text("ALTER TABLE clients ADD COLUMN archive_reason VARCHAR(20) DEFAULT ''"))
+            db.session.commit()
+
+        if "editors" in tables:
+            cols = [c["name"] for c in inspector.get_columns("editors")]
+            if "archived" not in cols:
+                db.session.execute(text("ALTER TABLE editors ADD COLUMN archived INTEGER DEFAULT 0"))
+            db.session.commit()
 
         if "client_profiles" in tables:
             cols = [c["name"] for c in inspector.get_columns("client_profiles")]
@@ -789,6 +951,25 @@ def migrate_db():
                     db.session.execute(text(f"ALTER TABLE client_profiles ADD COLUMN {col} TEXT DEFAULT ''"))
             if "budget_per_video" not in cols:
                 db.session.execute(text("ALTER TABLE client_profiles ADD COLUMN budget_per_video INTEGER DEFAULT 0"))
+            if "account_manager" not in cols:
+                db.session.execute(text("ALTER TABLE client_profiles ADD COLUMN account_manager VARCHAR(100) DEFAULT ''"))
+            if "pm" not in cols:
+                db.session.execute(text("ALTER TABLE client_profiles ADD COLUMN pm VARCHAR(100) DEFAULT ''"))
+            db.session.commit()
+
+        if "staff" in tables:
+            staff_count = db.session.execute(text("SELECT COUNT(*) FROM staff")).scalar()
+            if staff_count == 0:
+                for nm in DEFAULT_STAFF_NAMES:
+                    db.session.add(Staff(name=nm))
+                db.session.commit()
+
+        if "didi_software" in tables:
+            cols = [c["name"] for c in inspector.get_columns("didi_software")]
+            if "status" not in cols:
+                db.session.execute(text("ALTER TABLE didi_software ADD COLUMN status VARCHAR(20) DEFAULT '訂閱中'"))
+            if "start_date" not in cols:
+                db.session.execute(text("ALTER TABLE didi_software ADD COLUMN start_date VARCHAR(10) DEFAULT ''"))
             db.session.commit()
     except Exception as e:
         db.session.rollback()
