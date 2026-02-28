@@ -8,6 +8,7 @@ import traceback
 from datetime import datetime, date, timezone, timedelta
 
 import requests as http_requests
+from sqlalchemy import text
 from flask import Flask, request, jsonify, send_file, abort
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -238,12 +239,13 @@ def logo():
 @app.route("/api/dashboard", methods=["GET"])
 def get_dashboard():
     """Single request that returns videos, clients, editors, profiles, staff, didi data."""
-    videos_active = Video.query.filter(Video.archived == False).order_by(Video.draft_date.asc()).all()
-    videos_archived = Video.query.filter(Video.archived == True).order_by(Video.draft_date.asc()).all()
-    clients_active = Client.query.filter(Client.archived == False).order_by(Client.id).all()
-    clients_archived = Client.query.filter(Client.archived == True).order_by(Client.id).all()
-    editors_active = Editor.query.filter(Editor.archived == False).order_by(Editor.id).all()
-    editors_archived = Editor.query.filter(Editor.archived == True).order_by(Editor.id).all()
+    # PostgreSQL may have archived as INTEGER; use text() to avoid integer=boolean error
+    videos_active = Video.query.filter(text("videos.archived = 0")).order_by(Video.draft_date.asc()).all()
+    videos_archived = Video.query.filter(text("videos.archived = 1")).order_by(Video.draft_date.asc()).all()
+    clients_active = Client.query.filter(text("clients.archived = 0")).order_by(Client.id).all()
+    clients_archived = Client.query.filter(text("clients.archived = 1")).order_by(Client.id).all()
+    editors_active = Editor.query.filter(text("editors.archived = 0")).order_by(Editor.id).all()
+    editors_archived = Editor.query.filter(text("editors.archived = 1")).order_by(Editor.id).all()
     client_profiles_rows = ClientProfile.query.all()
     editor_profiles_rows = EditorProfile.query.all()
     staff_rows = Staff.query.order_by(Staff.id).all()
@@ -271,11 +273,7 @@ def get_dashboard():
 @app.route("/api/videos", methods=["GET"])
 def list_videos():
     show_archived = request.args.get("archived") == "1"
-    q = Video.query
-    if show_archived:
-        q = q.filter(Video.archived == True)
-    else:
-        q = q.filter(Video.archived == False)
+    q = Video.query.filter(text("videos.archived = 1" if show_archived else "videos.archived = 0"))
     rows = q.order_by(Video.draft_date.asc()).all()
     return jsonify([r.to_dict() for r in rows])
 
@@ -389,16 +387,23 @@ def archive_client(cid):
     return jsonify({"message": "archived"})
 
 
+@app.route("/api/clients/<int:cid>/unarchive", methods=["POST", "PUT", "PATCH"])
+def unarchive_client(cid):
+    c = Client.query.get(cid)
+    if not c:
+        abort(404)
+    c.archived = False
+    c.archive_reason = ""
+    db.session.commit()
+    return jsonify({"message": "unarchived"})
+
+
 # ── API: Editors ──
 
 @app.route("/api/editors", methods=["GET"])
 def list_editors():
     show_archived = request.args.get("archived") == "1"
-    q = Editor.query
-    if show_archived:
-        q = q.filter(Editor.archived == True)
-    else:
-        q = q.filter(Editor.archived == False)
+    q = Editor.query.filter(text("editors.archived = 1" if show_archived else "editors.archived = 0"))
     rows = q.order_by(Editor.id).all()
     return jsonify([r.to_dict() for r in rows])
 
@@ -432,6 +437,16 @@ def archive_editor(eid):
     e.archived = True
     db.session.commit()
     return jsonify({"message": "archived"})
+
+
+@app.route("/api/editors/<int:eid>/unarchive", methods=["POST", "PUT", "PATCH"])
+def unarchive_editor(eid):
+    e = Editor.query.get(eid)
+    if not e:
+        abort(404)
+    e.archived = False
+    db.session.commit()
+    return jsonify({"message": "unarchived"})
 
 
 # ── API: Staff (負責業務/PM 名單) ──
@@ -991,9 +1006,10 @@ _scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 _check_hour = int(os.getenv("CHECK_HOUR", "9"))
 _check_minute = int(os.getenv("CHECK_MINUTE", "0"))
 _scheduler.add_job(scheduled_overdue_check, "cron", hour=_check_hour, minute=_check_minute)
-_scheduler.add_job(scheduled_daily_update, "cron", hour="9-22", minute=0)
+# LINE 每日戰情：僅 08:00, 12:00, 16:00, 20:00 發送（每 4 小時）
+_scheduler.add_job(scheduled_daily_update, "cron", hour="8,12,16,20", minute=0)
 _scheduler.start()
-print(f"[Scheduler] Overdue check at {_check_hour:02d}:{_check_minute:02d}, daily update retries hourly 09-22")
+print(f"[Scheduler] Overdue check at {_check_hour:02d}:{_check_minute:02d}, daily LINE at 08:00, 12:00, 16:00, 20:00")
 
 
 if __name__ == "__main__":

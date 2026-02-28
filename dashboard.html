@@ -99,6 +99,8 @@ tbody td { padding: 7px 6px; border-bottom: 1px solid var(--border); font-size: 
 tbody tr:hover { background: #f8fafc; }
 tbody tr:last-child td { border-bottom: none; }
 
+/* 狀態橫向顯示，避免直書 */
+.ms-btn, thead th, .status-pipeline { writing-mode: horizontal-tb; text-orientation: mixed; white-space: nowrap; }
 .status-badge { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .status-待分配 { background: #fef3c7; color: #92400e; }
 .status-剪輯中 { background: #dbeafe; color: #1e40af; }
@@ -107,6 +109,15 @@ tbody tr:last-child td { border-bottom: none; }
 .status-已完成 { background: #d1fae5; color: #065f46; }
 .status-已上傳雲端 { background: #cffafe; color: #155e75; }
 .status-已上傳影片 { background: #f0fdf4; color: #14532d; }
+/* 五階段圓圈：準備、初剪、優化、排程、上片 */
+.status-pipeline { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; }
+.status-pipeline .step { width: 20px; height: 20px; border-radius: 50%; border: 2px solid #e2e8f0; background: #f8fafc; display: flex; align-items: center; justify-content: center; }
+.status-pipeline .step.active { background: #3b82f6; border-color: #3b82f6; color: #fff; }
+.status-pipeline .step.active.step-upload { background: #22c55e; border-color: #22c55e; }
+.status-pipeline .step.active + .step { border-color: #cbd5e1; }
+.status-pipeline .conn { width: 8px; height: 2px; background: #e2e8f0; }
+.status-pipeline .conn.active { background: #3b82f6; }
+.status-pipeline .conn.active-upload { background: #22c55e; }
 .overdue-tag { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 700; background: var(--danger); color: #fff; margin-right: 6px; }
 .note-cell { max-width: 130px; }
 .note-cell span { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
@@ -381,7 +392,6 @@ textarea { resize: vertical; min-height: 50px; }
           <th data-key="draft_date" onclick="sortBy('draft_date')">初稿繳交</th>
           <th data-key="upload_date" onclick="sortBy('upload_date')">預計上片</th>
           <th data-key="editor" onclick="sortBy('editor')">剪輯人員</th>
-          <th>注意事項</th>
           <th>操作</th>
         </tr></thead>
         <tbody id="tableBody"></tbody>
@@ -671,6 +681,27 @@ function genId(){return Date.now().toString(36)+Math.random().toString(36).slice
 function fmtMoney(n){return n.toLocaleString('zh-TW');}
 function fmtNum(n){return (parseInt(n,10)||0).toLocaleString('zh-TW');}
 
+function statusToStep(s){
+  if(s==='待分配')return 0;
+  if(s==='剪輯中'||s==='初稿修改中')return 1;
+  if(s==='客戶確認中'||s==='已完成')return 2;
+  if(s==='已上傳雲端')return 3;
+  if(s==='已上傳影片')return 4;
+  return 0;
+}
+const STATUS_STEP_LABELS=['準備','初剪','優化','排程','上片'];
+function renderStatusPipeline(status){
+  const step=statusToStep(status);
+  let html='<span class="status-pipeline" title="'+esc(status)+'">';
+  for(let i=0;i<5;i++){
+    if(i>0){ const connActive=step>=i; html+='<span class="conn'+(connActive?(i===4?' active-upload':' active'):'')+'"></span>'; }
+    const active=i<=step;
+    const uploadClass=i===4&&active?' step-upload':'';
+    html+='<span class="step'+(active?' active':'')+uploadClass+'" title="'+esc(STATUS_STEP_LABELS[i])+'">'+(active?STATUS_STEP_LABELS[i]:'')+'</span>';
+  }
+  return html+'</span>';
+}
+
 // ── Page switching ──
 function switchPage(id, el, bnav) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -892,17 +923,18 @@ function renderTable(){
   updateStats();renderRevenue();
   document.querySelectorAll('thead th').forEach(th=>{th.classList.remove('sorted-asc','sorted-desc');if(th.dataset.key===sortKey)th.classList.add(sortDir==='asc'?'sorted-asc':'sorted-desc');});
   const filtered=getFiltered(),tb=document.getElementById('tableBody');
-  if(!filtered.length){tb.innerHTML=`<tr><td colspan="9"><div class="empty-state"><div class="icon">📋</div><p>目前沒有符合條件的影片任務</p></div></td></tr>`;return;}
+  if(!filtered.length){tb.innerHTML=`<tr><td colspan="8"><div class="empty-state"><div class="icon">📋</div><p>目前沒有符合條件的影片任務</p></div></td></tr>`;return;}
   tb.innerHTML=filtered.map(d=>{
     const dy=daysUntil(d.draft_date),isDone=DONE_STATUSES.includes(d.status);
     const isOD=!isDone&&dy<0,isUR=!isDone&&dy>=0&&dy<=3,isFin=FINISHED_STATUSES.includes(d.status);
     const bg=isFin?'background:#f8fafc;opacity:.65':isOD?'background:#fef2f2':isUR?'background:#fffbeb':'';
     const ds=isOD?'color:var(--danger);font-weight:600':isUR?'color:var(--warning);font-weight:600':'';
     const ot=isOD?'<span class="overdue-tag">逾期</span>':'';
+    const statusPipeline=renderStatusPipeline(d.status);
     return`<tr style="${bg}"><td>${ot}<strong>${esc(d.client_name)}</strong></td><td>${esc(d.video_id)}</td><td>${esc(d.topic)}</td>
-      <td><span class="status-badge status-${d.status}">${d.status}</span></td>
+      <td>${statusPipeline}</td>
       <td style="${ds}">${fmtDate(d.draft_date)}</td><td>${fmtDate(d.upload_date)}</td>
-      <td>${esc(d.editor)}</td><td class="note-cell"><span title="${esc(d.notes)}">${esc(d.notes)||'-'}</span></td>
+      <td>${esc(d.editor)}</td>
       <td><div class="actions">
         <button class="btn btn-outline btn-sm" onclick="viewDetail('${d.id}')">查看</button>
         <button class="btn btn-primary btn-sm" onclick="editItem('${d.id}')">編輯</button>
@@ -1087,7 +1119,7 @@ function renderClientProfiles(){
       </div>`).join('');
 
     const archiveBadge=archiveReason?`<span class="status-badge" style="background:#e2e8f0;color:var(--text2);margin-left:4px">${esc(archiveReason)}</span>`:'';
-    const archiveBtn=archiveReason?'':`<button class="btn btn-outline btn-sm client-delete-btn" style="font-size:11px;padding:3px 8px" onclick="openArchiveClientModal('${esc(name)}')">典藏</button>`;
+    const archiveBtn=archiveReason?`<button class="btn btn-outline btn-sm" style="font-size:11px;padding:3px 8px" onclick="unarchiveClient('${esc(name)}')">取消典藏</button>`:`<button class="btn btn-outline btn-sm client-delete-btn" style="font-size:11px;padding:3px 8px" onclick="openArchiveClientModal('${esc(name)}')">典藏</button>`;
     return`<div class="profile-card">
       <h3><span>${esc(name)}</span>${archiveBadge}<span class="client-budget-wrap"><input type="number" class="client-budget-input" min="0" value="${p.budget_per_video||0}" placeholder="0" onchange="onClientFieldChange('${esc(name)}','budget_per_video',this.value)" title="每部金額"><span class="client-budget-unit">元/支</span></span>${archiveBtn}</h3>
       <div class="profile-row">
@@ -1136,6 +1168,12 @@ async function confirmArchiveClient(reason){
   else{const all=lsLoad(LS_CLIENTS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=true;all[idx].archive_reason=reason;}lsSave(LS_CLIENTS,all);}
   toast(`已典藏客戶「${name}」（${reason}）`);await loadAll();renderClientProfiles();
 }
+async function unarchiveClient(name){
+  const c=[...clients,...archivedClients].find(x=>x.name===name);
+  if(serverMode&&c){await apiCall(`/api/clients/${c.id}/unarchive`,{method:'POST'});}
+  else{const all=lsLoad(LS_CLIENTS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=false;all[idx].archive_reason='';}lsSave(LS_CLIENTS,all);}
+  toast(`已取消典藏客戶「${name}」`);await loadAll();renderClientProfiles();
+}
 
 function confirmDeleteEditor(name){
   pendingDeleteId=null;
@@ -1153,6 +1191,12 @@ async function archiveEditor(name){
   if(serverMode&&e){await apiCall(`/api/editors/${e.id}/archive`,{method:'POST'});}
   else{const all=lsLoad(LS_EDITORS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=true;}lsSave(LS_EDITORS,all);}
   toast(`已典藏人員「${name}」`);await loadAll();renderEditorProfiles();
+}
+async function unarchiveEditor(name){
+  const e=[...editors,...archivedEditors].find(x=>x.name===name);
+  if(serverMode&&e){await apiCall(`/api/editors/${e.id}/unarchive`,{method:'POST'});}
+  else{const all=lsLoad(LS_EDITORS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=false;}lsSave(LS_EDITORS,all);}
+  toast(`已取消典藏人員「${name}」`);await loadAll();renderEditorProfiles();
 }
 
 function openAddClientModal(){ document.getElementById('newClientName').value=''; document.getElementById('newClientBudget').value=''; document.getElementById('addClientModal').classList.add('active'); }
@@ -1240,7 +1284,7 @@ function renderEditorProfiles(){
     return`<div class="profile-card">
       <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${esc(ed.name)} <span class="work-status-badge ws-${ws}">${ws}</span>
         <span style="font-size:12px;font-weight:400;color:var(--text2)">進行中: ${assignedVideos} 支</span>
-        ${!ed.archived?`<button class="btn btn-outline btn-sm" style="margin-left:auto;font-size:11px;padding:3px 8px" onclick="archiveEditor('${esc(ed.name)}')">典藏</button>`:''}</h3>
+        ${ed.archived?`<button class="btn btn-outline btn-sm" style="margin-left:auto;font-size:11px;padding:3px 8px" onclick="unarchiveEditor('${esc(ed.name)}')">取消典藏</button>`:`<button class="btn btn-outline btn-sm" style="margin-left:auto;font-size:11px;padding:3px 8px" onclick="archiveEditor('${esc(ed.name)}')">典藏</button>`}</h3>
       <div class="profile-row">
         <div class="profile-field"><label>工作狀態</label>
           <select onchange="onEditorFieldChange('${esc(ed.name)}','work_status',this.value);renderEditorProfiles()">
