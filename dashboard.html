@@ -194,7 +194,6 @@ textarea { resize: vertical; min-height: 50px; }
 
 /* ── Mobile-only elements ── */
 .bottom-nav { display: none; }
-.mobile-page-header { display: none; }
 
 @media (max-width: 900px) {
   .sidebar { width: 56px; }
@@ -213,11 +212,12 @@ textarea { resize: vertical; min-height: 50px; }
   .sidebar { display: none; }
   .main-content { margin-left: 0; padding-bottom: 68px; }
 
-  /* Hide gradient header on mobile; page 1 gets its own title */
-  .header { display: none; }
-  .mobile-page-header { display: flex !important; }
+  /* Compact header on mobile */
+  .header { padding: 10px 14px; }
+  .header h1 { font-size: 15px; }
+  .header-right { gap: 4px; }
+  .header-right .btn { padding: 5px 8px; font-size: 10px; }
 
-  /* Revenue bar only shows on page-videos via JS toggle */
   .revenue-bar { flex-direction: column; gap: 8px; padding: 12px; margin: 0 10px; align-items: stretch; border-radius: 10px; }
   .rev-block { text-align: left; display: flex; justify-content: space-between; align-items: center; }
   .rev-block .rev-label { font-size: 12px; margin-bottom: 0; }
@@ -317,14 +317,6 @@ textarea { resize: vertical; min-height: 50px; }
 
 <!-- PAGE 1: Videos -->
 <div id="page-videos" class="page active">
-  <div class="mobile-page-header page-title" style="display:none;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
-    <span>影片管理</span>
-    <div style="display:flex;gap:5px;flex-wrap:wrap">
-      <button class="btn btn-primary btn-sm" onclick="openModal()">＋ 新增</button>
-      <button class="btn btn-outline btn-sm" onclick="triggerDailyUpdate()">LINE 戰情</button>
-      <button class="btn btn-outline btn-sm" onclick="exportCSV()">匯出</button>
-    </div>
-  </div>
   <section class="stats" id="stats"></section>
   <section class="toolbar">
     <input type="text" class="search-box" id="searchInput" placeholder="搜尋客戶、編號、主題、剪輯人員..." oninput="renderTable()">
@@ -528,8 +520,6 @@ function switchPage(id, el, bnav) {
   document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active'));
   if (bnav) bnav.classList.add('active');
   else { const bn = document.querySelector(`.bottom-nav a[data-page="${id}"]`); if (bn) bn.classList.add('active'); }
-  const rb = document.getElementById('revenueBar');
-  if (rb && window.innerWidth <= 768) rb.style.display = id === 'videos' ? '' : 'none';
   if (id === 'clients') renderClientProfiles();
   if (id === 'editors') renderEditorProfiles();
   if (id === 'didi') renderDidiPage();
