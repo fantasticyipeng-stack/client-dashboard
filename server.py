@@ -32,6 +32,12 @@ if DATABASE_URL.startswith("postgres://"):
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+    "pool_pre_ping": True,
+    "pool_recycle": 280,
+    "pool_size": 5,
+    "max_overflow": 2,
+}
 CORS(app)
 db = SQLAlchemy(app)
 
@@ -598,26 +604,36 @@ _daily_sent_date = None
 def scheduled_daily_update():
     global _daily_sent_date
     with app.app_context():
-        today = datetime.now(TZ_TW).date()
-        if _daily_sent_date == today:
-            print("[Scheduler] Daily update already sent today, skipping")
-            return
-        msg = build_daily_update()
-        ok = send_line_push(msg)
-        if ok:
-            _daily_sent_date = today
-        print(f"[Scheduler] Daily update sent, success={ok}")
+        try:
+            today = datetime.now(TZ_TW).date()
+            if _daily_sent_date == today:
+                print("[Scheduler] Daily update already sent today, skipping")
+                return
+            db.session.rollback()
+            msg = build_daily_update()
+            ok = send_line_push(msg)
+            if ok:
+                _daily_sent_date = today
+            print(f"[Scheduler] Daily update sent, success={ok}")
+        except Exception as e:
+            db.session.rollback()
+            print(f"[Scheduler] Daily update error: {e}")
 
 
 def scheduled_overdue_check():
     with app.app_context():
-        items = get_overdue_items()
-        msg = build_overdue_message(items)
-        if msg:
-            ok = send_line_push(msg)
-            print(f"[Scheduler] Sent overdue alert: {len(items)} items, success={ok}")
-        else:
-            print("[Scheduler] No overdue items.")
+        try:
+            db.session.rollback()
+            items = get_overdue_items()
+            msg = build_overdue_message(items)
+            if msg:
+                ok = send_line_push(msg)
+                print(f"[Scheduler] Sent overdue alert: {len(items)} items, success={ok}")
+            else:
+                print("[Scheduler] No overdue items.")
+        except Exception as e:
+            db.session.rollback()
+            print(f"[Scheduler] Overdue check error: {e}")
 
 
 @app.route("/api/check-overdue", methods=["POST"])

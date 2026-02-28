@@ -158,6 +158,8 @@ textarea { resize: vertical; min-height: 50px; }
 .profile-grid { padding: 16px 32px 32px; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; }
 .profile-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 20px; overflow: hidden; }
 .profile-card h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.client-budget-input { width: 72px; font-size: 12px; color: var(--text2); padding: 2px 6px; border: 1px solid var(--border); border-radius: 4px; margin-left: 4px; }
+.client-budget-input:focus { border-color: var(--primary); color: var(--text); outline: none; }
 .profile-field { margin-bottom: 12px; }
 .profile-field label { display: block; font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; }
 .profile-field input, .profile-field select, .profile-field textarea { font-size: 13px; padding: 7px 10px; }
@@ -207,6 +209,18 @@ textarea { resize: vertical; min-height: 50px; }
 @media (max-width: 768px) {
   .didi-table-wrap { display: none !important; }
   .didi-cards { display: block !important; }
+}
+.didi-compact-row { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #f8fafc; border-radius: 8px; margin-bottom: 8px; border: 1px solid var(--border); flex-wrap: wrap; }
+.didi-compact-row .dm-title { flex: 1; min-width: 0; font-weight: 500; }
+.didi-compact-row .dm-num { font-size: 13px; color: var(--text2); white-space: nowrap; }
+.didi-compact-row .dm-fee { font-weight: 600; color: var(--primary); white-space: nowrap; }
+.didi-compact-row .dm-actions { display: flex; gap: 4px; margin-left: auto; }
+@media (min-width: 769px) {
+  .didi-media-compact { display: none !important; }
+}
+@media (max-width: 768px) {
+  .didi-media-compact { display: block !important; }
+  .didi-media-table-cards { display: none !important; }
 }
 
 /* ── Mobile-only elements ── */
@@ -495,6 +509,35 @@ textarea { resize: vertical; min-height: 50px; }
       <button class="btn btn-outline" onclick="closeConfirm()">取消</button>
       <button class="btn btn-danger" onclick="confirmAction()">確定刪除</button>
     </div>
+  </div>
+</div>
+
+<!-- Add Client Modal -->
+<div class="modal-overlay" id="addClientModal">
+  <div class="modal">
+    <div class="modal-header"><h2>新增客戶</h2><button class="modal-close" onclick="closeAddClientModal()">&times;</button></div>
+    <div class="modal-body">
+      <div class="form-group"><label>客戶名稱 <span class="required">*</span></label><input type="text" id="newClientName" placeholder="請輸入客戶名稱"></div>
+      <div class="form-group"><label>每部金額（元）</label><input type="number" id="newClientBudget" min="0" placeholder="選填，用於營收計算"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeAddClientModal()">取消</button><button class="btn btn-primary" onclick="submitAddClient()">確定新增</button></div>
+  </div>
+</div>
+
+<!-- Didi Media Add/Edit Modal (mobile) -->
+<div class="modal-overlay" id="didiMediaModal">
+  <div class="modal">
+    <div class="modal-header"><h2 id="didiMediaModalTitle">新增自媒體記錄</h2><button class="modal-close" onclick="closeDidiMediaModal()">&times;</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="didiMediaEditId">
+      <div class="form-group"><label>影片標題</label><input type="text" id="dmTitle" placeholder="影片標題"></div>
+      <div class="form-group"><label>日期</label><input type="date" id="dmDate"></div>
+      <div class="form-group"><label>平台</label><select id="dmPlatform"><option value="IG">IG</option><option value="Threads">Threads</option><option value="FB">FB</option><option value="TikTok">TikTok</option></select></div>
+      <div class="form-group"><label>觀看數</label><input type="number" id="dmViewCount" min="0" value="0"></div>
+      <div class="form-group"><label>業配金額</label><input type="number" id="dmSponsorFee" min="0" value="0"></div>
+      <div class="form-group"><label>備註</label><input type="text" id="dmRemarks" placeholder="選填"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeDidiMediaModal()">取消</button><button class="btn btn-primary" onclick="submitDidiMediaModal()">儲存</button></div>
   </div>
 </div>
 
@@ -860,7 +903,6 @@ function renderClientProfiles(){
     const clientVideos=videos.filter(v=>v.client_name===name&&v.status==='已上傳影片');
     const price=CLIENT_PRICES[name];
     const budget=p.budget_per_video||0;
-    const priceLabel=budget>0?`每部預算 $${fmtMoney(budget)}`:price===-1?'觀看數>=5500: $5,500/支':price>0?`$${fmtMoney(price)}/支`:'無計費';
     const videoRows=clientVideos.length?clientVideos.map(v=>`<tr>
       <td>${esc(v.video_id)}</td><td>${esc(v.topic)}</td><td>${fmtDate(v.upload_date)}</td>
       <td><input type="number" value="${v.view_count||0}" min="0" onchange="updateVideoViewCount('${v.id}',this.value)"></td>
@@ -877,13 +919,12 @@ function renderClientProfiles(){
       </div>`).join('');
 
     return`<div class="profile-card">
-      <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${esc(name)} <span style="font-size:12px;font-weight:400;color:var(--text2)">${priceLabel}</span>
+      <h3 style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">${esc(name)} <input type="number" class="client-budget-input" min="0" value="${p.budget_per_video||0}" placeholder="0" onchange="onClientFieldChange('${esc(name)}','budget_per_video',this.value)" title="每部金額"> <span style="font-size:12px;font-weight:400;color:var(--text2)">元/支</span>
         <button class="btn btn-danger btn-sm" style="margin-left:auto;font-size:11px;padding:3px 8px" onclick="confirmDeleteClient('${esc(name)}')">刪除客戶</button></h3>
       <div class="profile-row">
         <div class="profile-field"><label>目前粉絲數</label><input type="number" value="${p.current_followers||0}" min="0" onchange="onClientFieldChange('${esc(name)}','current_followers',this.value)"></div>
         <div class="profile-field"><label>目標粉絲數</label><input type="number" value="${p.target_followers||0}" min="0" onchange="onClientFieldChange('${esc(name)}','target_followers',this.value)"></div>
       </div>
-      <div class="profile-field"><label>每部的預算（元）</label><input type="number" value="${p.budget_per_video||0}" min="0" placeholder="選填，用於營收計算" onchange="onClientFieldChange('${esc(name)}','budget_per_video',this.value)"></div>
       <div class="profile-field"><label style="margin-bottom:6px">社群媒體連結</label>
         <div class="profile-row" style="grid-template-columns:1fr 1fr">${socialHtml}</div>
       </div>
@@ -921,14 +962,19 @@ function confirmDeleteEditor(name){
   document.getElementById('confirmModal').classList.add('active');
 }
 
-async function addClientFromProfile(){
-  const name=prompt('輸入新客戶名稱：');if(!name||!name.trim())return;
-  const n=name.trim();
+function openAddClientModal(){ document.getElementById('newClientName').value=''; document.getElementById('newClientBudget').value=''; document.getElementById('addClientModal').classList.add('active'); }
+function closeAddClientModal(){ document.getElementById('addClientModal').classList.remove('active'); }
+async function submitAddClient(){
+  const n=document.getElementById('newClientName').value.trim();
+  if(!n){toast('請輸入客戶名稱',1);return;}
   if(clients.some(c=>c.name===n)){toast('此客戶已存在',1);return;}
+  const budget=parseInt(document.getElementById('newClientBudget').value,10)||0;
   if(serverMode){const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});if(r.error){toast(r.error,1);return;}}
   else{clients.push({id:(clients.length?Math.max(...clients.map(c=>c.id))+1:1),name:n});lsSave(LS_CLIENTS,clients);}
-  toast(`已新增客戶「${n}」`);await loadAll();renderClientProfiles();
+  const p=getClientProfile(n); p.budget_per_video=budget; saveClientProfile(n,p);
+  closeAddClientModal(); toast(`已新增客戶「${n}」`); await loadAll(); renderClientProfiles();
 }
+async function addClientFromProfile(){ openAddClientModal(); }
 
 async function updateVideoViewCount(id,val){
   const vc=parseInt(val)||0;
@@ -1013,6 +1059,7 @@ function renderDidiPage(){renderDidiMedia();renderDidiSpeech();renderDidiSoftwar
 
 // ── 自媒體記錄 ──
 function addDidiMedia(){
+  if(window.innerWidth<=768){ openDidiMediaModal(); return; }
   didiMedia.push({id:genId(),title:'',date:'',platform:'IG',view_count:0,sponsor_fee:0,remarks:''});
   saveDidiData('media');renderDidiMedia();
 }
@@ -1022,6 +1069,44 @@ function onDidiMediaChange(id,field,value){
   r[field]=(field==='view_count'||field==='sponsor_fee')?parseFloat(value)||0:value;
   saveDidiData('media');
   if(field==='sponsor_fee')renderRevenue();
+}
+function openDidiMediaModal(editId){
+  const id=editId||'';
+  document.getElementById('didiMediaEditId').value=id;
+  document.getElementById('didiMediaModalTitle').textContent=id?'編輯自媒體記錄':'新增自媒體記錄';
+  if(id){
+    const r=didiMedia.find(x=>x.id===id);if(!r)return;
+    document.getElementById('dmTitle').value=r.title||'';
+    document.getElementById('dmDate').value=r.date||'';
+    document.getElementById('dmPlatform').value=r.platform||'IG';
+    document.getElementById('dmViewCount').value=r.view_count||0;
+    document.getElementById('dmSponsorFee').value=r.sponsor_fee||0;
+    document.getElementById('dmRemarks').value=r.remarks||'';
+  }else{
+    document.getElementById('dmTitle').value='';
+    document.getElementById('dmDate').value='';
+    document.getElementById('dmPlatform').value='IG';
+    document.getElementById('dmViewCount').value=0;
+    document.getElementById('dmSponsorFee').value=0;
+    document.getElementById('dmRemarks').value='';
+  }
+  document.getElementById('didiMediaModal').classList.add('active');
+}
+function closeDidiMediaModal(){ document.getElementById('didiMediaModal').classList.remove('active'); }
+function submitDidiMediaModal(){
+  const id=document.getElementById('didiMediaEditId').value;
+  const title=document.getElementById('dmTitle').value.trim();
+  const date=document.getElementById('dmDate').value;
+  const platform=document.getElementById('dmPlatform').value;
+  const view_count=parseInt(document.getElementById('dmViewCount').value,10)||0;
+  const sponsor_fee=parseFloat(document.getElementById('dmSponsorFee').value)||0;
+  const remarks=document.getElementById('dmRemarks').value.trim();
+  if(id){
+    const r=didiMedia.find(x=>x.id===id);if(r){ r.title=title;r.date=date;r.platform=platform;r.view_count=view_count;r.sponsor_fee=sponsor_fee;r.remarks=remarks; }
+  }else{
+    didiMedia.push({id:genId(),title,date,platform,view_count,sponsor_fee,remarks});
+  }
+  saveDidiData('media'); renderDidiMedia(); renderRevenue(); closeDidiMediaModal();
 }
 function renderDidiMedia(){
   const el=document.getElementById('didiMediaSection');
@@ -1046,10 +1131,17 @@ function renderDidiMedia(){
     <div class="didi-card-field"><label>備註</label><input type="text" value="${esc(r.remarks||'')}" onchange="onDidiMediaChange('${r.id}','remarks',this.value)"></div>
     <div class="didi-card-actions"><button class="btn btn-danger btn-sm" onclick="delDidiMedia('${r.id}')">刪除</button></div>
   </div>`).join('');
+  const compactRows=didiMedia.map(r=>`<div class="didi-compact-row">
+    <span class="dm-title">${esc(r.title)||'—'}</span>
+    <span class="dm-num">觀看 ${r.view_count||0}</span>
+    <span class="dm-fee">$${fmtMoney(r.sponsor_fee||0)}</span>
+    <div class="dm-actions"><button class="btn btn-outline btn-sm" onclick="openDidiMediaModal('${r.id}')">編輯</button><button class="btn btn-danger btn-sm" onclick="delDidiMedia('${r.id}')">刪除</button></div>
+  </div>`).join('');
   el.innerHTML=`<h3>自媒體記錄 <button class="btn btn-primary btn-sm" onclick="addDidiMedia()">＋ 新增</button></h3>
     <div class="didi-table-wrap"><table class="didi-table"><thead><tr><th>影片標題</th><th>日期</th><th>平台</th><th>觀看數</th><th>業配金額</th><th>備註</th><th></th></tr></thead>
     <tbody>${rows||'<tr><td colspan="7" style="text-align:center;color:var(--text2)">尚無記錄</td></tr>'}</tbody></table></div>
-    <div class="didi-cards">${cards||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
+    <div class="didi-media-table-cards didi-cards">${cards||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
+    <div class="didi-media-compact">${compactRows||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
     <div class="didi-subtotal">業配收入小計：$${fmtMoney(subtotal)}</div>`;
 }
 
