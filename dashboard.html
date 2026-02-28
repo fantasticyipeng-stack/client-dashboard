@@ -192,6 +192,9 @@ textarea { resize: vertical; min-height: 50px; }
 .didi-table textarea { min-height: 32px; resize: vertical; }
 .didi-subtotal { margin-top: 10px; text-align: right; font-size: 14px; font-weight: 700; color: var(--primary); }
 
+/* ── Bottom Tab Bar (mobile) ── */
+.bottom-nav { display: none; }
+
 @media (max-width: 900px) {
   .sidebar { width: 56px; }
   .sidebar-title { display: none; }
@@ -203,6 +206,72 @@ textarea { resize: vertical; min-height: 50px; }
   .form-row, .profile-row { grid-template-columns: 1fr; }
   .stats { grid-template-columns: repeat(2, 1fr); }
   .profile-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .main-content { margin-left: 0; padding-bottom: 68px; }
+  .bottom-nav {
+    display: flex; position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--sidebar-bg); z-index: 100;
+    justify-content: space-around; align-items: stretch;
+    padding: 0; box-shadow: 0 -2px 12px rgba(0,0,0,.15);
+    border-top: 1px solid rgba(255,255,255,.1);
+  }
+  .bottom-nav a {
+    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 2px; padding: 8px 4px; color: #94a3b8; text-decoration: none;
+    font-size: 10px; font-weight: 500; transition: color .15s;
+  }
+  .bottom-nav a .bnav-icon { font-size: 20px; line-height: 1; }
+  .bottom-nav a.active { color: #fff; }
+  .bottom-nav a.active .bnav-icon { color: #a5b4fc; }
+
+  .header { padding: 12px 14px; }
+  .header h1 { font-size: 16px; }
+  .header-right { gap: 5px; }
+  .header-right .btn { padding: 6px 10px; font-size: 11px; }
+
+  .revenue-bar { flex-direction: column; gap: 10px; padding: 14px; margin: 8px 10px 0; align-items: stretch; }
+  .rev-block { text-align: left; display: flex; justify-content: space-between; align-items: center; }
+  .rev-block .rev-label { font-size: 12px; margin-bottom: 0; }
+  .rev-block .rev-value { font-size: 15px !important; }
+  .rev-progress-wrap { min-width: 0; }
+  .rev-pct { font-size: 16px; min-width: auto; text-align: right; }
+
+  .stats { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 10px; }
+  .stat-card { padding: 10px 12px; }
+  .stat-card .value { font-size: 20px; }
+  .stat-card .label { font-size: 11px; }
+
+  .toolbar { padding: 0 10px 10px; gap: 6px; }
+  .search-box { flex: 1 1 100%; min-width: 0; }
+  .ms-wrap { flex: 1; min-width: 0; }
+  .ms-btn { font-size: 12px; padding: 7px 8px; }
+
+  .table-wrapper { padding: 0 10px 16px; }
+  table { min-width: 600px; }
+  thead th { padding: 6px 4px; font-size: 10px; }
+  tbody td { padding: 6px 4px; font-size: 12px; }
+  .note-cell { max-width: 80px; }
+  .actions .btn { padding: 4px 6px; font-size: 11px; }
+
+  .page-title { padding: 14px 14px 6px; font-size: 16px; }
+  .profile-grid { padding: 10px 10px 20px; grid-template-columns: 1fr; gap: 12px; }
+  .profile-card { padding: 14px; }
+  .profile-row { grid-template-columns: 1fr; }
+
+  .didi-section { margin: 10px 10px; padding: 14px; }
+  .didi-table { min-width: 400px; }
+  .didi-table th, .didi-table td { padding: 5px 4px; font-size: 11px; }
+  .didi-table input, .didi-table select, .didi-table textarea { font-size: 11px; padding: 4px 5px; }
+
+  .modal { max-width: 100%; margin: 0 8px; }
+  .modal-body { padding: 12px 14px; }
+  .form-row { grid-template-columns: 1fr; }
+
+  .toast-container { top: 10px; right: 10px; left: 10px; }
+  .toast { font-size: 12px; }
 }
 </style>
 </head>
@@ -281,6 +350,14 @@ textarea { resize: vertical; min-height: 50px; }
   <div class="page-title" style="display:flex;justify-content:space-between;align-items:center;padding-right:32px">剪輯人員管理 <button class="btn btn-primary btn-sm" onclick="addEditorFromProfile()">＋ 新增人員</button></div>
   <div class="profile-grid" id="editorProfileGrid"></div>
 </div>
+
+<!-- Bottom Nav (mobile) -->
+<nav class="bottom-nav" id="bottomNav">
+  <a class="active" data-page="videos" onclick="switchPage('videos',null,this)"><span class="bnav-icon">&#9776;</span>影片</a>
+  <a data-page="clients" onclick="switchPage('clients',null,this)"><span class="bnav-icon">&#9733;</span>客戶</a>
+  <a data-page="didi" onclick="switchPage('didi',null,this)"><span class="bnav-icon">&#9830;</span>底迪</a>
+  <a data-page="editors" onclick="switchPage('editors',null,this)"><span class="bnav-icon">&#9998;</span>人員</a>
+</nav>
 
 <!-- Form Modal -->
 <div class="modal-overlay" id="formModal">
@@ -420,14 +497,19 @@ function genId(){return Date.now().toString(36)+Math.random().toString(36).slice
 function fmtMoney(n){return n.toLocaleString('zh-TW');}
 
 // ── Page switching ──
-function switchPage(id, el) {
+function switchPage(id, el, bnav) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   if (el) el.classList.add('active');
+  else document.querySelectorAll('.sidebar-nav a').forEach(a => { if (a.textContent.includes(id==='videos'?'影片管理':id==='clients'?'客戶':id==='didi'?'底迪':'剪輯')) a.classList.add('active'); });
+  document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active'));
+  if (bnav) bnav.classList.add('active');
+  else { const bn = document.querySelector(`.bottom-nav a[data-page="${id}"]`); if (bn) bn.classList.add('active'); }
   if (id === 'clients') renderClientProfiles();
   if (id === 'editors') renderEditorProfiles();
   if (id === 'didi') renderDidiPage();
+  window.scrollTo(0, 0);
 }
 
 // ── Revenue ──
