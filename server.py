@@ -8,7 +8,8 @@ import traceback
 from datetime import datetime, date, timezone, timedelta
 
 import requests as http_requests
-from sqlalchemy import text
+from sqlalchemy import text, Integer
+from sqlalchemy.types import TypeDecorator
 from flask import Flask, request, jsonify, send_file, abort
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
@@ -57,6 +58,19 @@ DEFAULT_EDITORS = ['李宥儀', '邱麟晴', '翁薏惠', '陳思妤', '高偉�
 
 
 # ── Models ──
+# PostgreSQL on Render has archived as INTEGER (0/1); map bool <-> int so ORM writes work
+class BoolAsInteger(TypeDecorator):
+    impl = Integer
+    cache_ok = True
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        return 1 if value else 0
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return bool(value)
+
 
 class Video(db.Model):
     __tablename__ = "videos"
@@ -76,7 +90,7 @@ class Video(db.Model):
     remarks = db.Column(db.Text, default="")
     created_at = db.Column(db.String(30), nullable=False)
     updated_at = db.Column(db.String(30), nullable=False)
-    archived = db.Column(db.Boolean, default=False)
+    archived = db.Column(BoolAsInteger, default=False)
 
     def to_dict(self):
         d = {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -87,7 +101,7 @@ class Client(db.Model):
     __tablename__ = "clients"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
-    archived = db.Column(db.Boolean, default=False)
+    archived = db.Column(BoolAsInteger, default=False)
     archive_reason = db.Column(db.String(20), default="")
 
     def to_dict(self):
@@ -98,7 +112,7 @@ class Editor(db.Model):
     __tablename__ = "editors"
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False, unique=True)
-    archived = db.Column(db.Boolean, default=False)
+    archived = db.Column(BoolAsInteger, default=False)
 
     def to_dict(self):
         return {"id": self.id, "name": self.name, "archived": self.archived}
