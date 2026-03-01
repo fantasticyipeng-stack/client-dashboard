@@ -649,6 +649,16 @@ textarea { resize: vertical; min-height: 50px; }
   </div>
 </div>
 
+<!-- 登入成功歡迎視窗（每次登入後只顯示一次） -->
+<div class="modal-overlay" id="welcomeLoginModal">
+  <div class="modal" style="max-width:400px;text-align:center">
+    <div class="modal-body" style="padding:28px 24px">
+      <p style="font-size:18px;line-height:1.6;color:var(--text);margin-bottom:24px">不管發生什麼事，我都在</p>
+      <button type="button" class="btn btn-primary" onclick="closeWelcomeLoginModal()" style="padding:12px 24px">點我確認</button>
+    </div>
+  </div>
+</div>
+
 <!-- Didi Media Add/Edit Modal (mobile) -->
 <div class="modal-overlay" id="didiMediaModal">
   <div class="modal">
@@ -939,6 +949,15 @@ async function loadAll(){
   buildMultiSelect('msEditorDrop',editors.map(e=>e.name),'msEditorCount');
   buildMultiSelect('msClientDrop',clients.map(c=>c.name),'msClientCount');
   renderRevenue(); renderTable();
+  if(ok&&serverMode) showWelcomeLoginModalIfNeeded();
+}
+function showWelcomeLoginModalIfNeeded(){
+  if(sessionStorage.getItem('welcomeLoginShown')) return;
+  sessionStorage.setItem('welcomeLoginShown','1');
+  document.getElementById('welcomeLoginModal').classList.add('active');
+}
+function closeWelcomeLoginModal(){
+  document.getElementById('welcomeLoginModal').classList.remove('active');
 }
 
 function populateDropdowns(){
