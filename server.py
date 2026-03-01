@@ -1108,21 +1108,13 @@ def build_daily_update():
     return "\n".join(lines)
 
 
-_daily_sent_date = None
-
 def scheduled_daily_update():
-    global _daily_sent_date
+    """每日戰情：08:00、12:00、20:00 各發一次。"""
     with app.app_context():
         try:
-            today = datetime.now(TZ_TW).date()
-            if _daily_sent_date == today:
-                print("[Scheduler] Daily update already sent today, skipping")
-                return
             db.session.rollback()
             msg = build_daily_update()
             ok = send_line_push(msg)
-            if ok:
-                _daily_sent_date = today
             print(f"[Scheduler] Daily update sent, success={ok}")
         except Exception as e:
             db.session.rollback()
@@ -1282,12 +1274,9 @@ def api_line_test():
 
 @app.route("/api/daily-update", methods=["POST", "GET"])
 def api_daily_update():
-    """Manually trigger the daily LINE update. GET allowed for external cron."""
-    global _daily_sent_date
+    """手動或由外部 cron 觸發每日戰情 LINE。GET 允許外部定時呼叫。"""
     msg = build_daily_update()
     ok = send_line_push(msg)
-    if ok:
-        _daily_sent_date = datetime.now(TZ_TW).date()
     return jsonify({"success": ok, "message": msg})
 
 
@@ -1362,8 +1351,8 @@ _scheduler = BackgroundScheduler(timezone="Asia/Taipei")
 _check_hour = int(os.getenv("CHECK_HOUR", "9"))
 _check_minute = int(os.getenv("CHECK_MINUTE", "0"))
 _scheduler.add_job(scheduled_overdue_check, "cron", hour=_check_hour, minute=_check_minute)
-# LINE 每日戰情：08:00, 12:00, 20:00 發送
-_scheduler.add_job(scheduled_daily_update, "cron", hour="8,12,20", minute=0)
+# LINE 每日戰情：08:00, 12:00, 20:00 發送（Render 免費方案會休眠，排程不會在休眠時執行，需用外部 cron 打 /api/daily-update）
+_scheduler.add_job(scheduled_daily_update, "cron", hour=[8, 12, 20], minute=0)
 # 每天 16:00 傳送「今天要上傳的影片」
 _scheduler.add_job(scheduled_today_upload, "cron", hour=16, minute=0)
 
