@@ -35,3 +35,5 @@ services:
         value: "9"
       - key: CHECK_MINUTE
         value: "0"
+      - key: SITE_PASSWORD
+        sync: false

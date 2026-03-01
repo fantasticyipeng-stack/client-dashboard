@@ -10,7 +10,7 @@ from datetime import datetime, date, timezone, timedelta
 import requests as http_requests
 from sqlalchemy import text, Integer
 from sqlalchemy.types import TypeDecorator
-from flask import Flask, request, jsonify, send_file, abort, redirect, session, url_for
+from flask import Flask, request, jsonify, send_file, abort, redirect, session, url_for, render_template_string
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
@@ -32,6 +32,10 @@ SESSION_SECRET_KEY = os.getenv("SESSION_SECRET_KEY", os.urandom(24).hex())
 ALLOWED_EMAILS = [e.strip().lower() for e in os.getenv("ALLOWED_EMAILS", "").split(",") if e.strip()]
 ALLOWED_DOMAIN = os.getenv("ALLOWED_DOMAIN", "").strip().lower()
 AUTH_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and SESSION_SECRET_KEY)
+
+# 網站密碼保護（先輸入此密碼才能進入登入/首頁）
+SITE_PASSWORD = os.getenv("SITE_PASSWORD", "90010198").strip()
+SITE_LOCK_ENABLED = bool(SITE_PASSWORD)
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.db")
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
@@ -79,6 +83,40 @@ def _login_required():
     if request.path.startswith("/api/"):
         return jsonify({"error": "請先登入", "login_url": "/login"}), 401
     return redirect(url_for("login_page"))
+
+
+def _site_unlock_required():
+    """若未啟用網站密碼或已解鎖則不處理；否則 redirect 到 /unlock。"""
+    if not SITE_LOCK_ENABLED:
+        return None
+    if session.get("site_unlocked"):
+        return None
+    path = request.path
+    if path in ("/health", "/unlock", "/logo.png"):
+        return None
+    return redirect(url_for("unlock_page"))
+
+
+@app.before_request
+def require_site_unlock():
+    return _site_unlock_required()
+
+
+@app.before_request
+def require_login():
+    path = request.path
+    if not AUTH_ENABLED:
+        return None
+    if path in ("/health", "/login", "/logout") or path.startswith("/auth/") or path == "/logo.png":
+        return None
+    if path == "/webhook":
+        return None
+    if path == "/api/line-test" or path == "/api/daily-update":
+        return None
+    if path == "/" or path.startswith("/api/"):
+        return _login_required()
+    return None
+
 
 # ── LINE Bot (direct REST API, no SDK) ──
 
@@ -280,6 +318,55 @@ def seed_defaults():
 
 # ── API: Serve frontend ──
 
+UNLOCK_HTML = r"""<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>網站密碼 - 小跟拍戰情版</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif; background: linear-gradient(135deg, #1e1b4b 0%, #312e81 100%); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.card { background: #fff; border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,.2); padding: 40px; max-width: 360px; width: 100%; text-align: center; }
+.card h1 { font-size: 20px; color: #1e293b; margin-bottom: 8px; }
+.card p { color: #64748b; font-size: 14px; margin-bottom: 20px; }
+.card .err { color: #dc2626; font-size: 13px; margin-bottom: 12px; }
+input[type=password] { width: 100%; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 16px; margin-bottom: 16px; }
+input[type=password]:focus { outline: none; border-color: #6366f1; }
+button { width: 100%; padding: 12px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; }
+button:hover { background: #4338ca; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>小跟拍戰情版</h1>
+  <p>請輸入網站密碼以繼續</p>
+  {% if error %}<p class="err">{{ error }}</p>{% endif %}
+  <form method="post" action="/unlock">
+    <input type="password" name="password" placeholder="密碼" autofocus autocomplete="current-password" />
+    <button type="submit">解鎖</button>
+  </form>
+</div>
+</body>
+</html>
+"""
+
+
+@app.route("/unlock", methods=["GET", "POST"])
+def unlock_page():
+    if not SITE_LOCK_ENABLED:
+        return redirect(url_for("index"))
+    if session.get("site_unlocked"):
+        return redirect(url_for("index"))
+    if request.method == "POST":
+        raw = (request.form.get("password") or "").strip()
+        if hmac.compare_digest(raw, SITE_PASSWORD):
+            session["site_unlocked"] = True
+            return redirect(url_for("index"))
+        return render_template_string(UNLOCK_HTML, error="密碼錯誤，請再試一次")
+    return render_template_string(UNLOCK_HTML, error=None)
+
+
 LOGIN_HTML = r"""<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -396,22 +483,6 @@ def logout():
         samesite=app.config.get("SESSION_COOKIE_SAMESITE", "Lax"),
     )
     return resp
-
-
-@app.before_request
-def require_login():
-    path = request.path
-    if not AUTH_ENABLED:
-        return None
-    if path in ("/health", "/login", "/logout") or path.startswith("/auth/") or path == "/logo.png":
-        return None
-    if path == "/webhook":
-        return None
-    if path == "/api/line-test" or path == "/api/daily-update":
-        return None
-    if path == "/" or path.startswith("/api/"):
-        return _login_required()
-    return None
 
 
 @app.route("/")
