@@ -1352,7 +1352,7 @@ _check_hour = int(os.getenv("CHECK_HOUR", "9"))
 _check_minute = int(os.getenv("CHECK_MINUTE", "0"))
 _scheduler.add_job(scheduled_overdue_check, "cron", hour=_check_hour, minute=_check_minute)
 # LINE 每日戰情：08:00, 12:00, 20:00 發送（Render 免費方案會休眠，排程不會在休眠時執行，需用外部 cron 打 /api/daily-update）
-_scheduler.add_job(scheduled_daily_update, "cron", hour=[8, 12, 20], minute=0)
+_scheduler.add_job(scheduled_daily_update, "cron", hour="8,12,20", minute=0)
 # 每天 16:00 傳送「今天要上傳的影片」
 _scheduler.add_job(scheduled_today_upload, "cron", hour=16, minute=0)
 
