@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import base64
 import traceback
+import threading
 from datetime import datetime, date, timezone, timedelta
 
 import requests as http_requests
@@ -1371,21 +1372,30 @@ _scheduler.add_job(scheduled_daily_update, "cron", hour="8,12,20", minute=0)
 _scheduler.add_job(scheduled_today_upload, "cron", hour=16, minute=0)
 
 
-with app.app_context():
+def _run_startup():
+    """在背景執行 DB 初始化與排程，讓 gunicorn worker 可立即接受請求（避免 Render 健康檢查逾時）。"""
+    with app.app_context():
+        try:
+            db.create_all()
+            migrate_db()
+            seed_defaults()
+            print("[Startup] Database initialized successfully.")
+        except Exception as e:
+            print(f"[Startup ERROR] {e}")
     try:
-        db.create_all()
-        migrate_db()
-        seed_defaults()
-        print("[Startup] Database initialized successfully.")
+        _scheduler.start()
+        print("[Scheduler] Overdue check at {:02d}:{:02d}, daily LINE at 08:00, 12:00, 20:00, today's upload at 16:00".format(_check_hour, _check_minute))
     except Exception as e:
-        print(f"[Startup ERROR] {e}")
+        print(f"[Scheduler start ERROR] {e}")
 
 
-_scheduler.start()
-print("[Scheduler] Overdue check at {:02d}:{:02d}, daily LINE at 08:00, 12:00, 20:00, today's upload at 16:00".format(_check_hour, _check_minute))
+# 改為背景執行，避免 worker 載入時卡住 20–40 秒導致 Render 判定 "No open HTTP ports"
+_thread = threading.Thread(target=_run_startup, daemon=True)
+_thread.start()
 
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", "5000"))
     print(f"Dashboard running at http://localhost:{port}")
+    _thread.join(timeout=60)  # 本機執行時等 startup 完成再開 server
     app.run(host="0.0.0.0", port=port, debug=False)
