@@ -92,7 +92,7 @@ def _site_unlock_required():
     if session.get("site_unlocked"):
         return None
     path = request.path
-    if path in ("/health", "/unlock", "/logo.png"):
+    if path in ("/health", "/unlock", "/viewer", "/logo.png"):
         return None
     return redirect(url_for("unlock_page"))
 
@@ -360,11 +360,25 @@ def unlock_page():
         return redirect(url_for("index"))
     if request.method == "POST":
         raw = (request.form.get("password") or "").strip()
+        if hmac.compare_digest(raw, "guest"):
+            session["site_unlocked"] = True
+            session["viewer_mode"] = True
+            return redirect(url_for("viewer_page"))
         if hmac.compare_digest(raw, SITE_PASSWORD):
             session["site_unlocked"] = True
             return redirect(url_for("index"))
         return render_template_string(UNLOCK_HTML, error="密碼錯誤，請再試一次")
     return render_template_string(UNLOCK_HTML, error=None)
+
+
+@app.route("/viewer")
+def viewer_page():
+    """Demo 檢視版：密碼 guest 進入，無真實資料、不儲存。"""
+    if not session.get("site_unlocked"):
+        return redirect(url_for("unlock_page"))
+    if not session.get("viewer_mode"):
+        return redirect(url_for("index"))
+    return send_file("viewer.html")
 
 
 LOGIN_HTML = r"""<!DOCTYPE html>
