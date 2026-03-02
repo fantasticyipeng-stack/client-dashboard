@@ -399,9 +399,9 @@ textarea { resize: vertical; min-height: 50px; }
 <header class="header">
   <h1>小跟拍戰情版</h1>
   <div class="header-right">
-    <a href="/logout" class="btn btn-white" style="text-decoration:none">登出</a>
-    <button class="btn btn-white" onclick="triggerOverdueCheck()">LINE 逾期提醒</button>
-    <button class="btn btn-white" onclick="triggerDailyUpdate()">LINE 每日戰情</button>
+    <a href="/logout" class="btn btn-white header-logout" style="text-decoration:none">登出</a>
+    <button class="btn btn-white header-line-overdue" onclick="triggerOverdueCheck()">LINE 逾期提醒</button>
+    <button class="btn btn-white header-line-daily" onclick="triggerDailyUpdate()">LINE 每日戰情</button>
     <button class="btn btn-white" onclick="exportCSV()">匯出 CSV</button>
     <button class="btn btn-white" onclick="openModal()">＋ 新增影片任務</button>
   </div>
@@ -716,6 +716,7 @@ textarea { resize: vertical; min-height: 50px; }
 </div>
 
 <script>
+const VIEWER_MODE = false;
 const DONE_STATUSES = ['初稿修改中','客戶確認中','已完成','已上傳雲端','已上傳影片'];
 const FINISHED_STATUSES = ['已上傳影片'];
 const ALL_STATUSES = ['待分配','剪輯中','初稿修改中','客戶確認中','已完成','已上傳雲端','已上傳影片'];
@@ -724,7 +725,7 @@ const DEFAULT_EDITORS = ['李宥儀','邱麟晴','翁薏惠','陳思妤','高偉
 
 const CLIENT_PRICES = {'大可為':4000,'JGB':2500,'婕絲':2500,'台中市政府數位發展局':10000,'吃喝玩樂':4000,'多德仕':4000,'和居':10000,'恩友友':10000,'萬華街區':0,'橙果創意':-1,'底迪':0};
 const PLATFORM_OPTIONS = ['IG','Threads','Tiktok','FB','Line Voom','Youtube'];
-const REVENUE_TARGET = 5000000;
+const REVENUE_TARGET = typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE ? 10000000 : 5000000;
 
 const LS_VIDEOS='vd_videos', LS_CLIENTS='vd_clients', LS_EDITORS='vd_editors';
 const LS_CLIENT_PROFILES='vd_client_profiles', LS_EDITOR_PROFILES='vd_editor_profiles', LS_STAFF='vd_staff';
@@ -878,6 +879,7 @@ document.getElementById('clientProfileGrid')&&document.getElementById('clientPro
 
 // ── Storage ──
 async function apiCall(path,opts={}){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ return Promise.reject(new Error('Demo 模式不連線')); }
   const res=await fetch(window.location.origin+path,{credentials:'include',headers:{'Content-Type':'application/json'},...opts,body:opts.body?JSON.stringify(opts.body):undefined});
   let data; try{ data=await res.json(); }catch(e){ data=null; }
   if(res.status===401){ window.location.href=(data&&data.login_url)||'/login'; return; }
@@ -887,14 +889,26 @@ async function apiCall(path,opts={}){
   }
   return data||{};
 }
-function lsLoad(k,d){const r=localStorage.getItem(k);if(r)return JSON.parse(r);if(d){localStorage.setItem(k,JSON.stringify(d));return d;}return[];}
-function lsSave(k,d){localStorage.setItem(k,JSON.stringify(d));}
+function lsLoad(k,d){if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE)return d!==undefined?d:[];const r=localStorage.getItem(k);if(r)return JSON.parse(r);if(d){localStorage.setItem(k,JSON.stringify(d));return d;}return[];}
+function lsSave(k,d){if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE)return;localStorage.setItem(k,JSON.stringify(d));}
 function initLocalDefaults(){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE)return;
   if(!localStorage.getItem(LS_CLIENTS))lsSave(LS_CLIENTS,DEFAULT_CLIENTS.map((n,i)=>({id:i+1,name:n})));
   if(!localStorage.getItem(LS_EDITORS))lsSave(LS_EDITORS,DEFAULT_EDITORS.map((n,i)=>({id:i+1,name:n})));
 }
 
 async function loadAll(){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){
+    videos=[]; videosForStats=[]; clients=[]; editors=[]; archivedClients=[]; archivedEditors=[];
+    clientProfiles={}; editorProfiles={}; staffList=[]; didiMedia=[]; didiSpeech=[]; didiSoftware=[];
+    serverMode=false;
+    populateDropdowns();
+    buildMultiSelect('msStatusDrop',ALL_STATUSES,'msStatusCount');
+    buildMultiSelect('msEditorDrop',editors.map(e=>e.name),'msEditorCount');
+    buildMultiSelect('msClientDrop',clients.map(c=>c.name),'msClientCount');
+    renderRevenue(); renderTable();
+    return;
+  }
   let ok=false;
   try{
     const b=await apiCall('/api/dashboard');
@@ -970,6 +984,13 @@ function populateDropdowns(){
 
 // ── Quick add ──
 async function quickAddClient(){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){
+    const n='客戶 '+(clients.length+archivedClients.length+1);
+    clients.push({id:genId(),name:n});
+    toast('已新增 '+n+'（Demo 模式，關閉視窗後還原）');
+    populateDropdowns(); document.getElementById('clientName').value=n;
+    return;
+  }
   const name=prompt('輸入新客戶名稱：');if(!name||!name.trim())return;const n=name.trim();
   if(clients.some(c=>c.name===n)){toast('此客戶已存在',1);return;}
   try{
@@ -984,6 +1005,13 @@ async function quickAddClient(){
   }catch(e){toast(e.message||'新增客戶失敗',1);}
 }
 async function quickAddEditor(){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){
+    const n='剪輯 '+(editors.length+archivedEditors.length+1);
+    editors.push({id:genId(),name:n});
+    toast('已新增 '+n+'（Demo 模式，關閉視窗後還原）');
+    populateDropdowns(); document.getElementById('editor').value=n;
+    return;
+  }
   const name=prompt('輸入新人員名稱：');if(!name||!name.trim())return;const n=name.trim();
   if(editors.some(e=>e.name===n)){toast('此人員已存在',1);return;}
   try{
@@ -1103,6 +1131,11 @@ async function handleSubmit(e){
     notes:document.getElementById('notes').value.trim(),
     remarks:document.getElementById('remarks').value.trim(),
   };
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){
+    if(editId){const idx=videos.findIndex(v=>v.id===editId);if(idx!==-1)Object.assign(videos[idx],entry);toast('已更新（Demo 模式，關閉視窗後還原）');}
+    else{videos.push({...entry,id:genId(),created_at:new Date().toISOString(),updated_at:new Date().toISOString()});toast('已新增（Demo 模式，關閉視窗後還原）');}
+    videosForStats=videos.filter(d=>!d.archived);closeModal();renderRevenue();renderTable();return;
+  }
   if(serverMode){
     if(editId){await apiCall(`/api/videos/${editId}`,{method:'PUT',body:entry});toast('任務已更新');}
     else{await apiCall('/api/videos',{method:'POST',body:entry});toast('任務已新增');}
@@ -1139,6 +1172,7 @@ function deleteItem(id){
   pendingDeleteId=id;
   document.getElementById('confirmMsg').textContent='確定要典藏這筆影片任務嗎？';
   window._confirmCb=async function(){
+    if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const v=videos.find(d=>d.id===id); if(v){v.archived=true;} videosForStats=videos.filter(d=>!d.archived); toast('已典藏（Demo 模式）'); renderRevenue(); renderTable(); return; }
     if(serverMode){await apiCall(`/api/videos/${id}/archive`,{method:'POST'});}
     else{const all=lsLoad(LS_VIDEOS,[]);const v=all.find(d=>d.id===id);if(v){v.archived=true;}lsSave(LS_VIDEOS,all);}
     toast('任務已典藏');await loadAll();
@@ -1147,6 +1181,7 @@ function deleteItem(id){
 }
 async function unarchiveVideo(id){
   try{
+    if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const v=videos.find(d=>d.id===id); if(v){v.archived=false;} videosForStats=videos.filter(d=>!d.archived); toast('已取消典藏（Demo 模式）'); renderRevenue(); renderTable(); return; }
     if(serverMode){await apiCall(`/api/videos/${id}/unarchive`,{method:'POST'});}
     else{const all=lsLoad(LS_VIDEOS,[]);const v=all.find(d=>d.id===id);if(v){v.archived=false;}lsSave(LS_VIDEOS,all);}
     toast('已取消典藏');await loadAll();
@@ -1155,6 +1190,7 @@ async function unarchiveVideo(id){
 function permanentDeleteVideo(id){
   document.getElementById('confirmMsg').textContent='確定要永久刪除這筆影片任務嗎？刪除後無法復原。';
   window._confirmCb=async function(){
+    if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const idx=videos.findIndex(d=>d.id===id); if(idx>=0){videos.splice(idx,1);} videosForStats=videos.filter(d=>!d.archived); toast('已刪除（Demo 模式）'); renderRevenue(); renderTable(); return; }
     if(serverMode){await apiCall(`/api/videos/${id}/delete_permanent`,{method:'POST'});}
     else{const all=lsLoad(LS_VIDEOS,[]);const idx=all.findIndex(d=>d.id===id);if(idx>=0){all.splice(idx,1);}lsSave(LS_VIDEOS,all);}
     toast('已刪除');await loadAll();
@@ -1181,10 +1217,12 @@ function exportCSV(){
 }
 
 async function triggerOverdueCheck(){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ toast('Demo 模式無法使用 LINE 提醒'); return; }
   if(!serverMode){toast('LINE 提醒需要啟動伺服器才能使用',true);return;}
   toast('正在檢查逾期任務...');const r=await apiCall('/api/check-overdue',{method:'POST'});toast(r.message,!r.sent&&r.count>0);
 }
 async function triggerDailyUpdate(){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ toast('Demo 模式無法使用 LINE 提醒'); return; }
   if(!serverMode){toast('LINE 提醒需要啟動伺服器才能使用',true);return;}
   toast('正在發送每日戰情...');const r=await apiCall('/api/daily-update',{method:'POST'});toast(r.success?'已發送每日戰情到 LINE':'發送失敗',!r.success);
 }
@@ -1194,7 +1232,8 @@ async function triggerDailyUpdate(){
 function getClientProfile(name){return clientProfiles[name]||{current_followers:0,target_followers:0,budget_per_video:0,reminders:'',social_ig:'',social_threads:'',social_tiktok:'',social_fb:'',social_line_voom:'',social_youtube:'',account_manager:'',pm:''};}
 
 function saveClientProfile(name,data){
-  clientProfiles[name]=data;
+  clientProfiles[name]=Object.assign(getClientProfile(name),data);
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE)return;
   if(serverMode){apiCall('/api/client-profiles',{method:'POST',body:{name,...data}});}
   else{lsSave(LS_CLIENT_PROFILES,clientProfiles);}
 }
@@ -1217,6 +1256,7 @@ function closeOtherStaffModal(){document.getElementById('otherStaffModal').class
 async function submitOtherStaff(){
   const name=document.getElementById('otherStaffName').value.trim();
   if(!name){toast('請輸入姓名',1);return;}
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ staffList.push({id:Date.now(),name}); if(pendingStaffClientName&&pendingStaffField){const p=getClientProfile(pendingStaffClientName);p[pendingStaffField]=name;saveClientProfile(pendingStaffClientName,p);} closeOtherStaffModal(); renderClientProfiles(); toast('已新增（Demo 模式）'); return; }
   if(serverMode){
     const r=await apiCall('/api/staff',{method:'POST',body:{name}});
     if(r.error){toast(r.error,1);return;}
@@ -1330,6 +1370,7 @@ function confirmDeleteClient(name){
   document.getElementById('confirmMsg').textContent=`確定要刪除客戶「${name}」嗎？此操作無法復原。`;
   window._confirmCb=async()=>{
     const c=[...clients,...archivedClients].find(x=>x.name===name);
+    if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ clients=clients.filter(x=>x.name!==name); archivedClients=archivedClients.filter(x=>x.name!==name); delete clientProfiles[name]; toast('已刪除（Demo 模式）'); populateDropdowns(); buildMultiSelect('msClientDrop',clients.map(c=>c.name),'msClientCount'); renderClientProfiles(); return; }
     if(serverMode&&c){await apiCall(`/api/clients/${c.id}`,{method:'DELETE'});}
     else{const all=lsLoad(LS_CLIENTS,[]);const filtered=all.filter(x=>x.name!==name);lsSave(LS_CLIENTS,filtered);}
     toast(`已刪除客戶「${name}」`);await loadAll();renderClientProfiles();
@@ -1346,6 +1387,7 @@ function closeArchiveClientModal(){document.getElementById('archiveClientModal')
 async function confirmArchiveClient(reason){
   const name=pendingArchiveClientName;closeArchiveClientModal();if(!name)return;
   try{
+    if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const idx=clients.findIndex(x=>x.name===name); if(idx>=0){const c=clients.splice(idx,1)[0];c.archived=true;c.archive_reason=reason;archivedClients.push(c);} toast('已典藏（Demo 模式）'); renderClientProfiles(); return; }
     const c=[...clients,...archivedClients].find(x=>x.name===name);
     if(serverMode&&c){await apiCall(`/api/clients/${c.id}/archive`,{method:'POST',body:{reason}});}
     else{const all=lsLoad(LS_CLIENTS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=true;all[idx].archive_reason=reason;}lsSave(LS_CLIENTS,all);}
@@ -1356,6 +1398,7 @@ async function confirmArchiveClient(reason){
   }catch(e){toast(e.message||'典藏失敗',1);}
 }
 async function unarchiveClient(name){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const idx=archivedClients.findIndex(x=>x.name===name); if(idx>=0){const c=archivedClients.splice(idx,1)[0];c.archived=false;c.archive_reason='';clients.push(c);} toast('已取消典藏（Demo 模式）'); renderClientProfiles(); return; }
   const c=[...clients,...archivedClients].find(x=>x.name===name);
   if(serverMode&&c){await apiCall(`/api/clients/${c.id}/unarchive`,{method:'POST'});}
   else{const all=lsLoad(LS_CLIENTS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=false;all[idx].archive_reason='';}lsSave(LS_CLIENTS,all);}
@@ -1367,6 +1410,7 @@ function confirmDeleteEditor(name){
   document.getElementById('confirmMsg').textContent=`確定要刪除剪輯人員「${name}」嗎？此操作無法復原。`;
   window._confirmCb=async()=>{
     const e=editors.find(x=>x.name===name);
+    if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ editors=editors.filter(x=>x.name!==name); toast('已刪除（Demo 模式）'); populateDropdowns(); buildMultiSelect('msEditorDrop',editors.map(x=>x.name),'msEditorCount'); renderEditorProfiles(); return; }
     if(serverMode&&e){await apiCall(`/api/editors/${e.id}`,{method:'DELETE'});}
     else{editors=editors.filter(x=>x.name!==name);lsSave(LS_EDITORS,editors);}
     toast(`已刪除人員「${name}」`);await loadAll();renderEditorProfiles();
@@ -1377,6 +1421,7 @@ function confirmDeleteEditorPermanent(name){
   document.getElementById('confirmMsg').textContent=`確定要永久刪除剪輯人員「${name}」嗎？此操作無法復原。`;
   window._confirmCb=async()=>{
     const e=[...editors,...archivedEditors].find(x=>x.name===name);
+    if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ editors=editors.filter(x=>x.name!==name); archivedEditors=archivedEditors.filter(x=>x.name!==name); delete editorProfiles[name]; toast('已刪除（Demo 模式）'); populateDropdowns(); buildMultiSelect('msEditorDrop',editors.map(x=>x.name),'msEditorCount'); renderEditorProfiles(); return; }
     if(serverMode&&e){await apiCall(`/api/editors/${e.id}/delete_permanent`,{method:'POST'});}
     else{const all=lsLoad(LS_EDITORS,[]);const filtered=all.filter(x=>x.name!==name);lsSave(LS_EDITORS,filtered);}
     toast(`已刪除人員「${name}」`);await loadAll();populateDropdowns();buildMultiSelect('msEditorDrop',editors.map(x=>x.name),'msEditorCount');renderEditorProfiles();
@@ -1385,6 +1430,7 @@ function confirmDeleteEditorPermanent(name){
 }
 async function archiveEditor(name){
   try{
+    if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const idx=editors.findIndex(x=>x.name===name); if(idx>=0){const e=editors.splice(idx,1)[0];e.archived=true;archivedEditors.push(e);} toast('已典藏（Demo 模式）'); populateDropdowns(); buildMultiSelect('msEditorDrop',editors.map(x=>x.name),'msEditorCount'); renderEditorProfiles(); return; }
     const e=[...editors,...archivedEditors].find(x=>x.name===name);
     if(serverMode&&e){await apiCall(`/api/editors/${e.id}/archive`,{method:'POST'});}
     else{const all=lsLoad(LS_EDITORS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=true;}lsSave(LS_EDITORS,all);}
@@ -1396,6 +1442,7 @@ async function archiveEditor(name){
 }
 async function unarchiveEditor(name){
   try{
+    if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const idx=archivedEditors.findIndex(x=>x.name===name); if(idx>=0){const e=archivedEditors.splice(idx,1)[0];e.archived=false;editors.push(e);} toast('已取消典藏（Demo 模式）'); populateDropdowns(); buildMultiSelect('msEditorDrop',editors.map(x=>x.name),'msEditorCount'); renderEditorProfiles(); return; }
     const e=[...editors,...archivedEditors].find(x=>x.name===name);
     if(serverMode&&e){await apiCall(`/api/editors/${e.id}/unarchive`,{method:'POST'});}
     else{const all=lsLoad(LS_EDITORS);const idx=all.findIndex(x=>x.name===name);if(idx>=0){all[idx].archived=false;}lsSave(LS_EDITORS,all);}
@@ -1413,6 +1460,7 @@ async function submitAddClient(){
   if(!n){toast('請輸入客戶名稱',1);return;}
   if(clients.some(c=>c.name===n)){toast('此客戶已存在',1);return;}
   const budget=parseInt(document.getElementById('newClientBudget').value,10)||0;
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const displayName='客戶 '+(clients.length+archivedClients.length+1); clients.push({id:genId(),name:displayName}); const p=getClientProfile(displayName); p.budget_per_video=budget; saveClientProfile(displayName,p); closeAddClientModal(); toast('已新增（Demo 模式）'); populateDropdowns(); buildMultiSelect('msClientDrop',clients.map(c=>c.name),'msClientCount'); renderClientProfiles(); return; }
   try {
     if(serverMode){
       const r=await apiCall('/api/clients',{method:'POST',body:{name:n}});
@@ -1430,6 +1478,7 @@ async function addClientFromProfile(){ openAddClientModal(); }
 
 async function updateVideoViewCount(id,val){
   const vc=parseInt(val)||0;
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const v=videos.find(d=>d.id===id); if(v){v.view_count=vc;v.updated_at=new Date().toISOString();} videosForStats=videos.filter(d=>!d.archived); renderRevenue(); renderTable(); renderClientProfiles(); return; }
   if(serverMode){await apiCall(`/api/videos/${id}`,{method:'PUT',body:{view_count:vc}});}
   else{const all=lsLoad(LS_VIDEOS,[]);const v=all.find(d=>d.id===id);if(v){v.view_count=vc;v.updated_at=new Date().toISOString();}lsSave(LS_VIDEOS,all);}
   await loadAll();renderClientProfiles();
@@ -1466,6 +1515,7 @@ async function submitVideoPlatformViews(){
     const inputs=row.querySelectorAll('input, select');
     return { link: (inputs[0].value||'').trim(), platform: inputs[1].value||'IG', view_count: parseInt(inputs[2].value,10)||0 };
   });
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const v=videos.find(d=>d.id===videoId); if(v){ v.platform_views=JSON.stringify(platform_views); v.updated_at=new Date().toISOString(); } videosForStats=videos.filter(d=>!d.archived); closeVideoPlatformViewsModal(); renderRevenue(); renderTable(); renderClientProfiles(); toast('已儲存（Demo 模式）'); return; }
   if(serverMode){ await apiCall(`/api/videos/${videoId}`,{method:'PUT',body:{platform_views}}); }
   else{ const all=lsLoad(LS_VIDEOS,[]); const v=all.find(d=>d.id===videoId); if(v){ v.platform_views=JSON.stringify(platform_views); v.updated_at=new Date().toISOString(); } lsSave(LS_VIDEOS,all); }
   closeVideoPlatformViewsModal(); await loadAll(); renderClientProfiles(); renderRevenue(); toast('已儲存');
@@ -1477,6 +1527,7 @@ function getEditorProfile(name){return editorProfiles[name]||{work_status:'開�
 
 function saveEditorProfile(name,data){
   editorProfiles[name]=data;
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE)return;
   if(serverMode){apiCall('/api/editor-profiles',{method:'POST',body:{name,...data}});}
   else{lsSave(LS_EDITOR_PROFILES,editorProfiles);}
 }
@@ -1525,6 +1576,7 @@ function renderEditorProfiles(){
 function onEditorFieldChange(name,field,value){const p=getEditorProfile(name);p[field]=value;saveEditorProfile(name,p);}
 
 async function addEditorFromProfile(){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ const n='剪輯 '+(editors.length+archivedEditors.length+1); editors.push({id:genId(),name:n}); toast('已新增 '+n+'（Demo 模式）'); populateDropdowns(); buildMultiSelect('msEditorDrop',editors.map(e=>e.name),'msEditorCount'); renderEditorProfiles(); return; }
   const name=prompt('輸入新人員名稱：');if(!name||!name.trim())return;
   const n=name.trim();
   if(editors.some(e=>e.name===n)){toast('此人員已存在',1);return;}
@@ -1846,7 +1898,13 @@ function renderDidiSoftware(){
 document.querySelectorAll('.modal-overlay').forEach(o=>{o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('active');});});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')document.querySelectorAll('.modal-overlay.active, .confirm-overlay.active').forEach(m=>m.classList.remove('active'));});
 
-loadAll();
+loadAll().then(function(){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){
+    var h=document.querySelector('.header h1'); if(h) h.innerHTML='小跟拍戰情版 <span class="demo-badge" style="display:inline-block;background:var(--warning);color:#fff;font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px;vertical-align:middle">Demo</span>';
+    var logout=document.querySelector('.header-logout'); if(logout){ logout.href='/unlock'; logout.textContent='離開 Demo'; }
+    document.querySelectorAll('.header-line-overdue, .header-line-daily').forEach(function(b){ b.style.display='none'; });
+  }
+});
 </script>
 </body>
 </html>

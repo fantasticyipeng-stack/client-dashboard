@@ -11,7 +11,7 @@ from datetime import datetime, date, timezone, timedelta
 import requests as http_requests
 from sqlalchemy import text, Integer
 from sqlalchemy.types import TypeDecorator
-from flask import Flask, request, jsonify, send_file, abort, redirect, session, url_for, render_template_string
+from flask import Flask, request, jsonify, send_file, abort, redirect, session, url_for, render_template_string, Response
 from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
@@ -374,12 +374,16 @@ def unlock_page():
 
 @app.route("/viewer")
 def viewer_page():
-    """Demo 檢視版：密碼 guest 進入，無真實資料、不儲存。"""
+    """Demo 版：密碼 guest 進入，與主站相同操作介面，但 1000 萬目標、客戶/剪輯以代號顯示、不連動後端、關閉視窗即還原。"""
     if not session.get("site_unlocked"):
         return redirect(url_for("unlock_page"))
     if not session.get("viewer_mode"):
         return redirect(url_for("index"))
-    return send_file("viewer.html")
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.html")
+    with open(path, "r", encoding="utf-8") as f:
+        html = f.read()
+    html = html.replace("const VIEWER_MODE = false;", "const VIEWER_MODE = true;")
+    return Response(html, mimetype="text/html; charset=utf-8")
 
 
 LOGIN_HTML = r"""<!DOCTYPE html>
