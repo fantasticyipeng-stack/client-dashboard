@@ -16,7 +16,7 @@ from flask_cors import CORS
 from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, parse_qs
 
 load_dotenv()
 
@@ -37,6 +37,9 @@ AUTH_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and SESSION_SECRET
 # 網站密碼保護（先輸入此密碼才能進入登入/首頁）
 SITE_PASSWORD = os.getenv("SITE_PASSWORD", "90010198").strip()
 SITE_LOCK_ENABLED = bool(SITE_PASSWORD)
+
+# YouTube 觀看數自動抓取（需在 Google Cloud 建立專案並啟用 YouTube Data API v3，取得 API 金鑰）
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.db")
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
@@ -336,6 +339,7 @@ input[type=password] { width: 100%; padding: 12px 16px; border: 1px solid #e2e8f
 input[type=password]:focus { outline: none; border-color: #6366f1; }
 button { width: 100%; padding: 12px; background: #4f46e5; color: #fff; border: none; border-radius: 8px; font-size: 15px; font-weight: 500; cursor: pointer; }
 button:hover { background: #4338ca; }
+.hint { margin-top: 16px; font-size: 13px; color: #64748b; }
 </style>
 </head>
 <body>
@@ -347,6 +351,7 @@ button:hover { background: #4338ca; }
     <input type="password" name="password" placeholder="密碼" autofocus autocomplete="current-password" />
     <button type="submit">解鎖</button>
   </form>
+  <p class="hint">Demo 模式（密碼 guest）不會儲存任何資料；正式資料僅在輸入正式密碼並登入後從伺服器載入。</p>
 </div>
 </body>
 </html>
@@ -357,9 +362,10 @@ button:hover { background: #4338ca; }
 def unlock_page():
     if not SITE_LOCK_ENABLED:
         return redirect(url_for("index"))
-    # 從 Demo 點「離開 Demo」進來時：清除 session，直接顯示解鎖表單，讓使用者可再輸入正式密碼
+    # 從 Demo 點「離開 Demo」進來時：只清除 Demo/解鎖狀態，保留已登入的 email，避免誤清導致要重新登入、或讓人誤會資料不見
     if request.method == "GET" and session.get("viewer_mode"):
-        session.clear()
+        session.pop("viewer_mode", None)
+        session.pop("site_unlocked", None)
     if session.get("site_unlocked"):
         return redirect(url_for("index"))
     if request.method == "POST":
@@ -570,6 +576,55 @@ def get_dashboard():
     })
 
 
+# ── YouTube 觀看數（僅 YouTube 支援自動抓取；IG/TikTok/FB 等無公開 API）──
+
+def _youtube_video_id(url):
+    """從 YouTube 連結取出影片 ID。支援 watch?v=、youtu.be/、embed/。"""
+    if not url or not isinstance(url, str):
+        return None
+    url = url.strip()
+    if "youtu.be/" in url:
+        try:
+            return url.split("youtu.be/")[1].split("?")[0].split("/")[0].strip() or None
+        except IndexError:
+            return None
+    if "youtube.com" not in url:
+        return None
+    try:
+        parsed = urlparse(url)
+        if parsed.path in ("/watch", "/watch/"):
+            qs = parse_qs(parsed.query)
+            vid = (qs.get("v") or [None])[0]
+            return (vid or "").strip() or None
+        if "/embed/" in parsed.path:
+            return parsed.path.split("/embed/")[-1].split("/")[0].split("?")[0].strip() or None
+    except Exception:
+        pass
+    return None
+
+
+def _fetch_youtube_view_count(video_id):
+    """呼叫 YouTube Data API v3 取得觀看數。回傳 int 或 None（失敗）。"""
+    if not YOUTUBE_API_KEY or not video_id:
+        return None
+    try:
+        r = http_requests.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={"part": "statistics", "id": video_id, "key": YOUTUBE_API_KEY},
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+        items = data.get("items") or []
+        if not items:
+            return None
+        stats = items[0].get("statistics") or {}
+        vc = stats.get("viewCount")
+        return int(vc) if vc is not None else None
+    except Exception:
+        return None
+
+
 # ── API: Videos ──
 
 @app.route("/api/videos", methods=["GET"])
@@ -633,6 +688,42 @@ def delete_video(vid):
         v.updated_at = datetime.now().isoformat()
         db.session.commit()
     return jsonify({"message": "archived"})
+
+
+@app.route("/api/fetch-platform-views", methods=["POST"])
+def fetch_platform_views():
+    """依連結自動抓取觀看數。目前僅支援 YouTube；IG/TikTok/FB 等需手動輸入。"""
+    d = request.json or {}
+    links = d.get("links") or []
+    if not isinstance(links, list):
+        return jsonify({"error": "請提供 links 陣列"}), 400
+    results = []
+    for item in links:
+        link = (item.get("link") or "").strip()
+        platform = (item.get("platform") or "").strip()
+        out = {"link": link, "platform": platform, "view_count": None, "error": None}
+        if not link:
+            out["error"] = "未填連結"
+            results.append(out)
+            continue
+        # 僅 YouTube 可自動抓取
+        norm_platform = platform.lower() if platform else ""
+        if "youtube" in norm_platform or _youtube_video_id(link):
+            vid = _youtube_video_id(link)
+            if not vid:
+                out["error"] = "無法辨識 YouTube 影片 ID"
+            elif not YOUTUBE_API_KEY:
+                out["error"] = "未設定 YOUTUBE_API_KEY，無法自動抓取"
+            else:
+                vc = _fetch_youtube_view_count(vid)
+                if vc is not None:
+                    out["view_count"] = vc
+                else:
+                    out["error"] = "無法取得觀看數（請確認連結與 API 金鑰）"
+        else:
+            out["error"] = "僅支援 YouTube 連結自動抓取；其他平台請手動輸入觀看數"
+        results.append(out)
+    return jsonify({"results": results})
 
 
 @app.route("/api/videos/<vid>/archive", methods=["POST", "PUT", "PATCH"])

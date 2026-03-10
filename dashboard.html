@@ -611,8 +611,9 @@ textarea { resize: vertical; min-height: 50px; }
       <p id="videoPlatformViewsTopic" style="margin-bottom:12px;font-weight:600"></p>
       <div id="videoPlatformViewsRows"></div>
       <button type="button" class="btn btn-outline btn-sm" onclick="addVideoPlatformViewRow()" style="margin-top:8px">＋ 新增一筆</button>
+      <p class="hint" style="margin-top:12px;font-size:12px;color:var(--text2)">僅 YouTube 連結可自動抓取觀看數；IG / TikTok / FB 等請手動輸入。</p>
     </div>
-    <div class="modal-footer"><button class="btn btn-outline" onclick="closeVideoPlatformViewsModal()">取消</button><button class="btn btn-primary" onclick="submitVideoPlatformViews()">儲存</button></div>
+    <div class="modal-footer"><button type="button" class="btn btn-outline" id="btnFetchPlatformViews" onclick="fetchVideoPlatformViews()">自動抓取觀看數</button><button type="button" class="btn btn-outline" onclick="closeVideoPlatformViewsModal()">取消</button><button class="btn btn-primary" onclick="submitVideoPlatformViews()">儲存</button></div>
   </div>
 </div>
 
@@ -1495,6 +1496,18 @@ function openVideoPlatformViewsModal(videoId){
   if(!pv.length) pv=[{link:'',platform:'IG',view_count:0}];
   const container=document.getElementById('videoPlatformViewsRows');
   container.innerHTML=pv.map((row,i)=>vpvRowHtml(i,row)).join('');
+  // 只有「需要負責 YouTube」的客戶才顯示自動抓取按鈕：
+  // 1) 目前程式內建：CLIENT_EXTRA_SOCIAL[name] 的第一個值為 'youtube'（例如：多德仕）
+  // 2) 或是在客戶檔案中有填寫 social_youtube
+  const btnFetch=document.getElementById('btnFetchPlatformViews');
+  if(btnFetch){
+    let hasYoutube=false;
+    const extra=CLIENT_EXTRA_SOCIAL[v.client_name];
+    if(extra && extra[0]==='youtube') hasYoutube=true;
+    const profile=getClientProfile(v.client_name);
+    if(profile && (profile.social_youtube||'').trim()) hasYoutube=true;
+    btnFetch.style.display=hasYoutube?'inline-flex':'none';
+  }
   document.getElementById('videoPlatformViewsModal').classList.add('active');
 }
 function vpvRowHtml(i,row){
@@ -1508,6 +1521,37 @@ function addVideoPlatformViewRow(){
 }
 function removeVpvRow(btn){ btn.closest('.vpv-row').remove(); }
 function closeVideoPlatformViewsModal(){ document.getElementById('videoPlatformViewsModal').classList.remove('active'); }
+async function fetchVideoPlatformViews(){
+  if(typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE){ toast('Demo 模式無法自動抓取',1); return; }
+  const rows=document.getElementById('videoPlatformViewsRows').querySelectorAll('.vpv-row');
+  const links=Array.from(rows).map(row=>{
+    const inputs=row.querySelectorAll('input, select');
+    return { link:(inputs[0].value||'').trim(), platform:inputs[1].value||'IG' };
+  });
+  const hasLink=links.some(x=>x.link);
+  if(!hasLink){ toast('請先填寫至少一筆連結',1); return; }
+  const btn=document.getElementById('btnFetchPlatformViews');
+  const origText=btn.textContent;
+  btn.disabled=true; btn.textContent='抓取中...';
+  try {
+    const res=await apiCall('/api/fetch-platform-views',{ method:'POST', body:{ links } });
+    const results=res.results||[];
+    let updated=0, errs=[];
+    rows.forEach((row,i)=>{
+      const inputs=row.querySelectorAll('input, select');
+      const r=results[i];
+      if(!r) return;
+      if(r.view_count!=null){ inputs[2].value=r.view_count; updated++; }
+      if(r.error&&r.link) errs.push(r.error);
+    });
+    if(updated) toast('已更新 '+updated+' 筆觀看數');
+    if(errs.length) toast(errs[0]+(errs.length>1?'（共 '+errs.length+' 筆）':''), 1);
+  } catch(e){
+    toast(e&&e.message?e.message:'抓取失敗',1);
+  } finally {
+    btn.disabled=false; btn.textContent=origText;
+  }
+}
 async function submitVideoPlatformViews(){
   const videoId=document.getElementById('videoPlatformViewsVideoId').value;
   const rows=document.getElementById('videoPlatformViewsRows').querySelectorAll('.vpv-row');
