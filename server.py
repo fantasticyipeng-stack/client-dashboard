@@ -357,6 +357,9 @@ button:hover { background: #4338ca; }
 def unlock_page():
     if not SITE_LOCK_ENABLED:
         return redirect(url_for("index"))
+    # 從 Demo 點「離開 Demo」進來時：清除 session，直接顯示解鎖表單，讓使用者可再輸入正式密碼
+    if request.method == "GET" and session.get("viewer_mode"):
+        session.clear()
     if session.get("site_unlocked"):
         return redirect(url_for("index"))
     if request.method == "POST":
