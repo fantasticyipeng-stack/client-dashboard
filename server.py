@@ -38,8 +38,11 @@ AUTH_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and SESSION_SECRET
 SITE_PASSWORD = os.getenv("SITE_PASSWORD", "90010198").strip()
 SITE_LOCK_ENABLED = bool(SITE_PASSWORD)
 
-# YouTube 觀看數自動抓取（需在 Google Cloud 建立專案並啟用 YouTube Data API v3，取得 API 金鑰）
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
+# YouTube 觀看數自動抓取：
+# - DORTEX 客戶：使用 YOUTUBE_API_KEY_DORTEX
+# - 底迪（YOUR_AI_BUDDY）：預留 YOUTUBE_API_KEY_YOUR_AI_BUDDY，先不串接
+YOUTUBE_API_KEY_DORTEX = os.getenv("YOUTUBE_API_KEY_DORTEX", "").strip()
+YOUTUBE_API_KEY_YOUR_AI_BUDDY = os.getenv("YOUTUBE_API_KEY_YOUR_AI_BUDDY", "").strip()
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.db")
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
@@ -605,12 +608,12 @@ def _youtube_video_id(url):
 
 def _fetch_youtube_view_count(video_id):
     """呼叫 YouTube Data API v3 取得觀看數。回傳 int 或 None（失敗）。"""
-    if not YOUTUBE_API_KEY or not video_id:
+    if not YOUTUBE_API_KEY_DORTEX or not video_id:
         return None
     try:
         r = http_requests.get(
             "https://www.googleapis.com/youtube/v3/videos",
-            params={"part": "statistics", "id": video_id, "key": YOUTUBE_API_KEY},
+            params={"part": "statistics", "id": video_id, "key": YOUTUBE_API_KEY_DORTEX},
             timeout=10,
         )
         r.raise_for_status()
@@ -712,8 +715,8 @@ def fetch_platform_views():
             vid = _youtube_video_id(link)
             if not vid:
                 out["error"] = "無法辨識 YouTube 影片 ID"
-            elif not YOUTUBE_API_KEY:
-                out["error"] = "未設定 YOUTUBE_API_KEY，無法自動抓取"
+            elif not YOUTUBE_API_KEY_DORTEX:
+                out["error"] = "未設定 YOUTUBE_API_KEY_DORTEX，無法自動抓取"
             else:
                 vc = _fetch_youtube_view_count(vid)
                 if vc is not None:
