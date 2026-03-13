@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>台灣鄉鎮市區測驗 - 全台行政區地圖</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      line-height: 1.5;
+    }
+    .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+    header {
+      background: #1a5276;
+      color: #fff;
+      padding: 24px 20px;
+      text-align: center;
+      margin: -20px -20px 24px -20px;
+    }
+    h1 { margin: 0; font-size: 1.75rem; font-weight: 700; }
+    .subtitle { margin-top: 8px; opacity: 0.9; font-size: 0.95rem; }
+    .intro {
+      background: #fff;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .intro p { margin: 0 0 12px; }
+    .intro p:last-child { margin-bottom: 0; }
+
+    #start-area { padding: 20px 0; text-align: center; }
+    #start-area .btn { font-size: 1.1rem; padding: 14px 32px; }
+
+    #quiz-area { display: none; }
+    #quiz-area.active { display: block; }
+    .quiz-title { font-size: 1.25rem; color: #1a5276; margin: 0 0 12px; text-align: center; }
+    .timer-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .timer { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; color: #1a5276; }
+    .timer.warning { color: #b03e3e; }
+    .score-display { font-size: 1.1rem; color: #555; }
+    .score-display strong { color: #1a5276; }
+    .high-score-display { font-size: 0.95rem; color: #1a5276; margin-left: 12px; }
+    .high-score-display::before { content: "｜ "; color: #999; }
+    .controls { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+    .btn {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      font-family: inherit;
+      cursor: pointer;
+      background: #e8e8e8;
+      color: #333;
+    }
+    .btn:hover { background: #ddd; }
+    .btn-primary { background: #1a5276; color: #fff; }
+    .btn-primary:hover { background: #154360; }
+    .btn-danger { background: #b03e3e; color: #fff; }
+    .btn-danger:hover { background: #8b3131; }
+
+    .county-map-section {
+      background: #fff;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    @media (min-width: 1024px) {
+      .county-map-section { padding: 24px; margin-bottom: 24px; }
+      .county-map-section h3 { font-size: 1.1rem; }
+      .county-map-wrap { min-height: 480px; height: 70vh; max-height: 800px; }
+    }
+    .county-map-section { position: relative; }
+    .county-map-section h3 { margin: 0 0 12px; font-size: 1rem; color: #555; }
+    .input-wrap-above-map { margin-bottom: 12px; }
+    .county-map-wrap {
+      width: 100%;
+      max-width: 100%;
+      min-height: 420px;
+      height: 65vh;
+      max-height: 720px;
+      overflow: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 4px;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .county-map-inner {
+      display: block;
+      margin: auto;
+      min-width: 0;
+      min-height: 0;
+      transition: none;
+      touch-action: pan-x pan-y;
+      box-sizing: border-box;
+      flex-shrink: 0;
+    }
+    .county-map-wrap svg {
+      display: block;
+      touch-action: pan-x pan-y;
+    }
+    .map-zoom-buttons {
+      position: absolute;
+      right: 12px;
+      bottom: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 2;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+      border-radius: 6px;
+      padding: 4px;
+      background: #fff;
+    }
+    .map-zoom-buttons .btn-zoom {
+      width: 40px; height: 40px; padding: 0; font-size: 1.35rem; line-height: 1;
+      border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .map-zoom-buttons .btn-zoom:hover { background: #e8eef2; }
+    .county-map-wrap path.township {
+      fill: #e8eef2;
+      stroke: #b0bcc4;
+      stroke-width: 0.5;
+      cursor: default;
+      transition: fill 0.2s ease;
+    }
+    .county-map-wrap path.township.filled { fill: #1a5276; }
+    .county-map-wrap path.township:hover { stroke: #1a5276; }
+    .county-map-wrap path.county-border {
+      fill: none;
+      stroke: #333;
+      stroke-width: 1.2;
+      stroke-linejoin: round;
+      pointer-events: none;
+    }
+    .map-loading { text-align: center; padding: 40px 20px; color: #666; }
+    .map-loading.error { color: #b03e3e; }
+
+    .input-wrap {
+      background: #fff;
+      padding: 16px;
+      border-radius: 8px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .input-wrap label { display: block; font-size: 0.9rem; color: #666; margin-bottom: 8px; }
+    .input-wrap input {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 1.1rem;
+      border: 2px solid #ddd;
+      border-radius: 6px;
+      font-family: inherit;
+    }
+    .input-wrap input:focus { outline: none; border-color: #1a5276; }
+
+    .guessed-list { display: none !important; }
+    .guessed-list h3 { margin: 0 0 12px; font-size: 1rem; color: #555; }
+    .guessed-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+    .guessed-tag { background: #d5e8f7; color: #1a5276; padding: 6px 12px; border-radius: 4px; font-size: 0.85rem; }
+
+    .answer-blocks-section { background: #fff; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .answer-blocks-section h3 { margin: 0 0 12px; font-size: 1rem; color: #555; }
+    .answer-blocks-county { margin-bottom: 16px; }
+    .answer-blocks-county:last-child { margin-bottom: 0; }
+    .answer-blocks-county .county-name { font-weight: 600; color: #333; font-size: 0.9rem; margin-bottom: 6px; }
+    .answer-blocks-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .answer-block {
+      display: inline-block;
+      padding: 4px 10px;
+      font-size: 0.8rem;
+      border-radius: 3px;
+      border: 1px solid #ddd;
+      background: #f9f9f9;
+      color: #666;
+      min-width: 2.5em;
+      text-align: center;
+    }
+    .answer-block.correct { background: #d4edda; color: #155724; border-color: #c3e6cb; }
+    .answer-block.wrong { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+
+    #result-area { display: none; }
+    #result-area.active { display: block; }
+    .result-card {
+      background: #fff;
+      border-radius: 8px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    .result-card h2 { margin: 0 0 16px; font-size: 1.25rem; color: #1a5276; }
+    .result-stats { font-size: 1.1rem; margin-bottom: 16px; }
+    .result-stats p { margin: 0 0 6px; }
+    .result-stats p:last-child { margin-bottom: 0; }
+    .result-overall-stats { margin-top: 8px; }
+    .result-stats .percent { font-weight: 700; color: #1a5276; }
+    .county-stats-section { margin: 20px 0; }
+    .county-stats-section h3 { margin: 0 0 10px; font-size: 1rem; color: #555; }
+    .county-stats-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .county-stats-table th, .county-stats-table td { padding: 6px 10px; text-align: left; border-bottom: 1px solid #eee; }
+    .county-stats-table th { color: #555; font-weight: 600; }
+    .county-stats-table .pct { font-variant-numeric: tabular-nums; }
+    .county-stats-table .best { color: #1a5276; }
+    .township-stats-section { margin: 20px 0; }
+    .township-stats-section h3 { margin: 0 0 10px; font-size: 1rem; color: #555; }
+    .township-stats-section .township-stats-wrap { max-height: 400px; overflow-y: auto; }
+    .township-stats-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .township-stats-table th, .township-stats-table td { padding: 5px 8px; text-align: left; border-bottom: 1px solid #eee; }
+    .township-stats-table th { color: #555; font-weight: 600; position: sticky; top: 0; background: #fff; }
+    .township-stats-table .pct { font-variant-numeric: tabular-nums; }
+    .missing-section { margin-top: 24px; }
+    .missing-section h3 { cursor: pointer; padding: 12px 0; margin: 0; font-size: 1rem; color: #1a5276; border-bottom: 1px solid #eee; user-select: none; }
+    .missing-section h3:hover { color: #154360; }
+    .missing-section h3::before { content: "▶ "; font-size: 0.8em; }
+    .missing-section.open h3::before { content: "▼ "; }
+    .missing-section .county-list { display: none; padding: 12px 0 12px 20px; }
+    .missing-section.open .county-list { display: block; }
+    .county-list span { display: inline-block; margin: 4px 8px 4px 0; color: #666; font-size: 0.9rem; }
+    .retake { margin-top: 20px; }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>台灣鄉鎮市區測驗</h1>
+      <p class="subtitle">全台 368 行政區 · 輸入正確名稱，該區塊會在地圖上亮起</p>
+    </header>
+
+    <div class="intro">
+      <p>本測驗使用<strong>政府開放資料</strong>轉製的鄉鎮市區界線（<a href="https://data.gov.tw/dataset/7441" target="_blank" rel="noopener">鄉鎮市區界線 TWD97</a>，由 <a href="https://github.com/jason2506/Taiwan.TopoJSON" target="_blank" rel="noopener">Taiwan.TopoJSON</a> 提供 TopoJSON）。</p>
+      <p>輸入任一個鄉、鎮、市、區名稱，答對後該行政區輪廓會在地圖上<strong>亮起</strong>。可省略「區」「鄉」「鎮」「市」後綴，「臺」「台」皆可。限時 15 分鐘。</p>
+    </div>
+
+    <div id="start-area">
+      <button type="button" class="btn btn-primary" id="btn-start">開始測驗（載入全台地圖）</button>
+    </div>
+
+    <div id="quiz-area">
+      <h2 class="quiz-title">全台灣 368 鄉鎮市區</h2>
+      <div class="timer-row">
+        <span class="timer" id="timer">15:00</span>
+        <span class="score-display" id="score-display"><strong id="score-num">0</strong> / <strong id="total-num">368</strong></span>
+        <span class="high-score-display" id="high-score-display"></span>
+      </div>
+      <div class="controls">
+        <button type="button" class="btn" id="btn-pause">暫停</button>
+        <button type="button" class="btn btn-danger" id="btn-giveup">放棄</button>
+      </div>
+      <div class="input-wrap input-wrap-above-map">
+        <label for="answer-input">輸入鄉鎮市區名稱：</label>
+        <input type="text" id="answer-input" placeholder="例如：板橋、仁愛區、竹南..." autocomplete="off">
+      </div>
+      <div class="county-map-section">
+        <h3>地圖（輸入正確名稱即亮起該區）</h3>
+        <div class="county-map-wrap" id="county-map-wrap">
+          <div class="county-map-inner" id="county-map-inner">
+            <div class="map-loading" id="map-loading">載入地圖中…</div>
+          </div>
+        </div>
+        <div class="map-zoom-buttons" aria-label="地圖縮放">
+          <button type="button" class="btn-zoom" id="btn-zoom-out" title="縮小">−</button>
+          <button type="button" class="btn-zoom" id="btn-zoom-in" title="放大">+</button>
+        </div>
+      </div>
+      <div class="guessed-list">
+        <h3>已答對：</h3>
+        <div class="guessed-tags" id="guessed-tags"></div>
+      </div>
+      <div class="answer-blocks-section" id="answer-blocks-section">
+        <h3>依縣市分類（答對＝綠，時間到未答＝紅字正確答案）</h3>
+        <div id="answer-blocks-container"></div>
+      </div>
+    </div>
+
+    <div id="result-area">
+      <div class="result-card">
+        <h2>測驗結果</h2>
+        <div class="result-stats" id="result-stats"></div>
+        <div class="county-stats-section" id="county-stats-section"></div>
+        <div class="township-stats-section" id="township-stats-section"></div>
+        <div class="missing-section" id="missing-section">
+          <h3>顯示未答出的鄉鎮市區</h3>
+          <div class="county-list" id="missing-list"></div>
+        </div>
+        <div class="retake">
+          <button type="button" class="btn btn-primary" id="btn-retake">再測一次</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/topojson-client@3.1.0"></script>
+  <script src="https://unpkg.com/d3@7.9.0"></script>
+  <script>
+    const LIMIT_MIN = 15;
+    const TOTAL = 368;
+    const TOPO_BASE = "https://raw.githubusercontent.com/jason2506/Taiwan.TopoJSON/master/topojson/towns/";
+    const COUNTIES_TOPOLOGY_URL = "https://raw.githubusercontent.com/jason2506/Taiwan.TopoJSON/master/topojson/counties.json";
+    // 縣市名稱 → TopoJSON 檔案代碼（Taiwan.TopoJSON 倉庫）
+    const COUNTY_CODES = {
+      "連江縣": "09007", "金門縣": "09020", "澎湖縣": "10016", "基隆市": "10017",
+      "新竹市": "10018", "嘉義市": "10020", "宜蘭縣": "10002", "新竹縣": "10004",
+      "苗栗縣": "10005", "彰化縣": "10007", "南投縣": "10008", "雲林縣": "10009",
+      "嘉義縣": "10010", "屏東縣": "10013", "臺東縣": "10014", "花蓮縣": "10015",
+      "臺北市": "63000", "新北市": "65000", "桃園市": "68000", "臺中市": "66000",
+      "臺南市": "67000", "高雄市": "64000"
+    };
+
+    const TAIWAN_TOWNSHIPS = {
+      "新北市": ["萬里區","金山區","板橋區","汐止區","深坑區","石碇區","瑞芳區","平溪區","雙溪區","貢寮區","新店區","坪林區","烏來區","永和區","中和區","土城區","三峽區","樹林區","鶯歌區","三重區","新莊區","泰山區","林口區","蘆洲區","五股區","八里區","淡水區","三芝區","石門區"],
+      "臺北市": ["中正區","大同區","中山區","松山區","大安區","萬華區","信義區","士林區","北投區","內湖區","南港區","文山區"],
+      "桃園市": ["中壢區","平鎮區","龍潭區","楊梅區","新屋區","觀音區","桃園區","龜山區","八德區","大溪區","復興區","大園區","蘆竹區"],
+      "臺中市": ["中區","東區","南區","西區","北區","北屯區","西屯區","南屯區","太平區","大里區","霧峰區","烏日區","豐原區","后里區","石岡區","東勢區","和平區","新社區","潭子區","大雅區","神岡區","大肚區","沙鹿區","龍井區","梧棲區","清水區","大甲區","外埔區","大安區"],
+      "臺南市": ["中西區","東區","南區","北區","安平區","安南區","永康區","歸仁區","新化區","左鎮區","玉井區","楠西區","南化區","仁德區","關廟區","龍崎區","官田區","麻豆區","佳里區","西港區","七股區","將軍區","學甲區","北門區","新營區","後壁區","白河區","東山區","六甲區","下營區","柳營區","鹽水區","善化區","大內區","山上區","新市區","安定區"],
+      "高雄市": ["新興區","前金區","苓雅區","鹽埕區","鼓山區","旗津區","前鎮區","三民區","楠梓區","小港區","左營區","仁武區","大社區","岡山區","路竹區","阿蓮區","田寮區","燕巢區","橋頭區","梓官區","彌陀區","永安區","湖內區","鳳山區","大寮區","林園區","鳥松區","大樹區","旗山區","美濃區","六龜區","內門區","杉林區","甲仙區","桃源區","那瑪夏區","茂林區","茄萣區"],
+      "基隆市": ["仁愛區","信義區","中正區","中山區","安樂區","暖暖區","七堵區"],
+      "新竹市": ["東區","北區","香山區"],
+      "嘉義市": ["東區","西區"],
+      "宜蘭縣": ["宜蘭市","頭城鎮","礁溪鄉","壯圍鄉","員山鄉","羅東鎮","三星鄉","大同鄉","五結鄉","冬山鄉","蘇澳鎮","南澳鄉"],
+      "新竹縣": ["竹北市","湖口鄉","新豐鄉","新埔鎮","關西鎮","芎林鄉","寶山鄉","竹東鎮","五峰鄉","橫山鄉","尖石鄉","北埔鄉","峨眉鄉"],
+      "苗栗縣": ["竹南鎮","頭份市","三灣鄉","南庄鄉","獅潭鄉","後龍鎮","通霄鎮","苑裡鎮","苗栗市","造橋鄉","頭屋鄉","公館鄉","大湖鄉","泰安鄉","銅鑼鄉","三義鄉","西湖鄉","卓蘭鎮"],
+      "彰化縣": ["彰化市","芬園鄉","花壇鄉","秀水鄉","鹿港鎮","福興鄉","線西鄉","和美鎮","伸港鄉","員林市","社頭鄉","永靖鄉","埔心鄉","溪湖鎮","大村鄉","埔鹽鄉","田中鎮","北斗鎮","田尾鄉","埤頭鄉","溪州鄉","竹塘鄉","二林鎮","大城鄉","芳苑鄉","二水鄉"],
+      "南投縣": ["南投市","中寮鄉","草屯鎮","國姓鄉","埔里鎮","仁愛鄉","名間鄉","集集鎮","水里鄉","魚池鄉","信義鄉","竹山鎮","鹿谷鄉"],
+      "雲林縣": ["斗南鎮","大埤鄉","虎尾鎮","土庫鎮","褒忠鄉","東勢鄉","臺西鄉","崙背鄉","麥寮鄉","斗六市","林內鄉","古坑鄉","莿桐鄉","西螺鎮","二崙鄉","北港鎮","水林鄉","口湖鄉","四湖鄉","元長鄉"],
+      "嘉義縣": ["番路鄉","梅山鄉","竹崎鄉","阿里山鄉","中埔鄉","大埔鄉","水上鄉","鹿草鄉","太保市","朴子市","東石鄉","六腳鄉","新港鄉","民雄鄉","大林鎮","溪口鄉","義竹鄉","布袋鎮"],
+      "屏東縣": ["屏東市","三地門鄉","霧臺鄉","瑪家鄉","九如鄉","里港鄉","高樹鄉","鹽埔鄉","長治鄉","麟洛鄉","竹田鄉","內埔鄉","萬丹鄉","潮州鎮","泰武鄉","來義鄉","萬巒鄉","崁頂鄉","新埤鄉","南州鄉","林邊鄉","東港鎮","琉球鄉","佳冬鄉","新園鄉","枋寮鄉","枋山鄉","春日鄉","獅子鄉","車城鄉","牡丹鄉","恆春鎮","滿州鄉"],
+      "臺東縣": ["臺東市","綠島鄉","蘭嶼鄉","延平鄉","卑南鄉","鹿野鄉","關山鎮","海端鄉","池上鄉","東河鄉","成功鎮","長濱鄉","太麻里鄉","金峰鄉","大武鄉","達仁鄉"],
+      "花蓮縣": ["花蓮市","新城鄉","秀林鄉","吉安鄉","壽豐鄉","鳳林鎮","光復鄉","豐濱鄉","瑞穗鄉","萬榮鄉","玉里鎮","卓溪鄉","富里鄉"],
+      "澎湖縣": ["馬公市","西嶼鄉","望安鄉","七美鄉","白沙鄉","湖西鄉"],
+      "金門縣": ["金沙鎮","金湖鎮","金寧鄉","金城鎮","烈嶼鄉","烏坵鄉"],
+      "連江縣": ["南竿鄉","北竿鄉","莒光鄉","東引鄉"]
+    };
+
+    function normalizeInput(s) {
+      return String(s).replace(/\s/g, "").replace(/臺/g, "台");
+    }
+    const _nameMap = new Map();
+    function buildNameMap() {
+      for (const [county, names] of Object.entries(TAIWAN_TOWNSHIPS)) {
+        for (const name of names) {
+          const entry = { name, county };
+          function add(k) {
+            k = normalizeInput(k);
+            if (!_nameMap.has(k)) _nameMap.set(k, []);
+            var arr = _nameMap.get(k);
+            if (!arr.some(function(e){ return e.name === entry.name && e.county === entry.county; })) arr.push(entry);
+          }
+          add(name);
+          var last = name.slice(-1);
+          if (["區","鄉","鎮","市"].indexOf(last) >= 0) add(name.slice(0, -1));
+        }
+      }
+      for (const [county, names] of Object.entries(TAIWAN_TOWNSHIPS)) {
+        for (const name of names) {
+          var k = normalizeInput(name).replace(/台/g, "臺");
+          if (!_nameMap.has(k)) _nameMap.set(k, []);
+          var arr = _nameMap.get(k);
+          if (!arr.some(function(e){ return e.name === name && e.county === county; })) arr.push({ name: name, county: county });
+        }
+      }
+    }
+    buildNameMap();
+    function findTownship(userInput) {
+      var key = normalizeInput(userInput);
+      var arr = _nameMap.get(key);
+      return arr && arr.length > 0 ? arr : null;
+    }
+
+    function getAllEntries() {
+      var list = [];
+      for (var county in TAIWAN_TOWNSHIPS)
+        TAIWAN_TOWNSHIPS[county].forEach(function(name) { list.push({ name: name, county: county }); });
+      return list;
+    }
+
+    var guessed = new Set();
+    var timerId = null;
+    var paused = false;
+    var pausedRemain = 0;
+    var startTime = null;
+
+    var el = {
+      startArea: document.getElementById("start-area"),
+      quizArea: document.getElementById("quiz-area"),
+      resultArea: document.getElementById("result-area"),
+      btnStart: document.getElementById("btn-start"),
+      scoreNum: document.getElementById("score-num"),
+      totalNum: document.getElementById("total-num"),
+      timer: document.getElementById("timer"),
+      btnPause: document.getElementById("btn-pause"),
+      btnGiveup: document.getElementById("btn-giveup"),
+      countyMapWrap: document.getElementById("county-map-wrap"),
+      countyMapInner: document.getElementById("county-map-inner"),
+      mapLoading: document.getElementById("map-loading"),
+      answerInput: document.getElementById("answer-input"),
+      guessedTags: document.getElementById("guessed-tags"),
+      resultStats: document.getElementById("result-stats"),
+      countyStatsSection: document.getElementById("county-stats-section"),
+      townshipStatsSection: document.getElementById("township-stats-section"),
+      highScoreDisplay: document.getElementById("high-score-display"),
+      missingSection: document.getElementById("missing-section"),
+      missingList: document.getElementById("missing-list"),
+      btnRetake: document.getElementById("btn-retake")
+    };
+    el.totalNum.textContent = TOTAL;
+
+    var STORAGE_KEY = "taiwan_township_quiz";
+    function getSavedStats() {
+      try {
+        var raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          var o = JSON.parse(raw);
+          var totalRuns = Number(o.totalRuns) || 0;
+          var overallSumPct = Number(o.overallSumPct) || 0;
+          var bc = {};
+          var oldByCounty = o.byCounty || {};
+          for (var c in oldByCounty) {
+            var v = oldByCounty[c];
+            if (typeof v === "number") {
+              bc[c] = { best: Math.round(v * 1000) / 10, sumPct: Math.round(v * 1000) / 10, games: 1 };
+            } else if (v && typeof v.best !== "undefined") {
+              bc[c] = { best: Number(v.best) || 0, sumPct: Number(v.sumPct) || 0, games: Number(v.games) || 0 };
+            }
+          }
+          var bt = o.byTownship || {};
+          return {
+            highScore: Number(o.highScore) || 0,
+            totalRuns: totalRuns,
+            overallSumPct: overallSumPct,
+            byCounty: bc,
+            byTownship: bt
+          };
+        }
+      } catch (e) {}
+      return { highScore: 0, totalRuns: 0, overallSumPct: 0, byCounty: {}, byTownship: {} };
+    }
+    function saveStats(count, perCountyPcts) {
+      try {
+        var prev = getSavedStats();
+        var totalRuns = prev.totalRuns + 1;
+        var overallSumPct = prev.overallSumPct + (TOTAL ? (count / TOTAL) * 100 : 0);
+        var highScore = Math.max(prev.highScore, count);
+        var bc = {};
+        Object.keys(TAIWAN_TOWNSHIPS).forEach(function(c) {
+          var pct100 = (perCountyPcts[c] != null ? perCountyPcts[c] : 0) * 100;
+          var prevC = prev.byCounty[c] || { best: 0, sumPct: 0, games: prev.totalRuns };
+          bc[c] = {
+            best: Math.max(prevC.best, pct100),
+            sumPct: prevC.sumPct + pct100,
+            games: totalRuns
+          };
+        });
+        var bt = {};
+        getAllEntries().forEach(function(e) {
+          var key = e.county + "\n" + e.name;
+          var guessedKey = e.name + "\n" + e.county;
+          var prevT = prev.byTownship[key] || { correct: 0, total: prev.totalRuns };
+          bt[key] = {
+            correct: prevT.correct + (guessed.has(guessedKey) ? 1 : 0),
+            total: totalRuns
+          };
+        });
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          highScore: highScore,
+          totalRuns: totalRuns,
+          overallSumPct: overallSumPct,
+          byCounty: bc,
+          byTownship: bt
+        }));
+      } catch (e) {}
+    }
+    function clearSavedStats() {
+      try { localStorage.removeItem(STORAGE_KEY); } catch (e) {}
+    }
+    function updateHighScoreDisplay() {
+      var h = getSavedStats().highScore;
+      el.highScoreDisplay.textContent = h > 0 ? "最高分：" + h : "";
+    }
+
+    function formatTime(sec) {
+      var m = Math.floor(sec / 60), s = sec % 60;
+      return m + ":" + (s < 10 ? "0" : "") + s;
+    }
+    function tick() {
+      if (paused) return;
+      var elapsed = Math.floor((Date.now() - startTime) / 1000);
+      var remain = LIMIT_MIN * 60 - elapsed;
+      if (remain <= 0) { endQuiz(); return; }
+      el.timer.textContent = formatTime(remain);
+      if (remain <= 60) el.timer.classList.add("warning");
+    }
+    function startTimer() {
+      startTime = Date.now();
+      pausedRemain = 0;
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(tick, 200);
+    }
+    function pauseTimer() {
+      paused = true;
+      var elapsed = Math.floor((Date.now() - startTime) / 1000);
+      pausedRemain = Math.max(0, LIMIT_MIN * 60 - elapsed);
+      if (timerId) clearInterval(timerId);
+      timerId = null;
+    }
+    function resumeTimer() {
+      paused = false;
+      startTime = Date.now() - (LIMIT_MIN * 60 - pausedRemain) * 1000;
+      pausedRemain = 0;
+      if (timerId) clearInterval(timerId);
+      timerId = setInterval(tick, 200);
+    }
+
+    function addGuessed(name, county) {
+      var key = name + "\n" + county;
+      if (guessed.has(key)) return false;
+      guessed.add(key);
+      var span = document.createElement("span");
+      span.className = "guessed-tag";
+      span.textContent = name + " (" + county + ")";
+      el.guessedTags.appendChild(span);
+      el.scoreNum.textContent = guessed.size;
+      var path = document.querySelector("path.township[data-county=\"" + county + "\"][data-name=\"" + name + "\"]");
+      if (path) path.classList.add("filled");
+      updateAnswerBlock(county, name, true);
+      return true;
+    }
+
+    function handleAnswer(raw) {
+      var trimmed = raw.trim();
+      if (!trimmed) return;
+      var found = findTownship(trimmed);
+      if (!found || found.length === 0) return;
+      var added = 0;
+      found.forEach(function(f) {
+        if (addGuessed(f.name, f.county)) added++;
+      });
+      if (added > 0) {
+        el.answerInput.value = "";
+        el.answerInput.placeholder = "繼續輸入...";
+      }
+    }
+
+    function endQuiz() {
+      pauseTimer();
+      el.quizArea.classList.remove("active");
+      el.resultArea.classList.add("active");
+      var count = guessed.size;
+      var pctByCounty = perCountyPcts();
+      if (count === 0) {
+        clearSavedStats();
+      } else {
+        saveStats(count, pctByCounty);
+      }
+      updateHighScoreDisplay();
+      renderResultStats(count);
+      renderCountyStats(pctByCounty);
+      renderTownshipStats();
+      var remaining = getAllEntries().filter(function(e) { return !guessed.has(e.name + "\n" + e.county); });
+      var byCounty = {};
+      remaining.forEach(function(e) {
+        if (!byCounty[e.county]) byCounty[e.county] = [];
+        byCounty[e.county].push(e.name);
+      });
+      el.missingList.innerHTML = "";
+      Object.keys(TAIWAN_TOWNSHIPS).forEach(function(county) {
+        var names = byCounty[county];
+        if (!names || names.length === 0) return;
+        var section = document.createElement("div");
+        section.className = "missing-section";
+        var h3 = document.createElement("h3");
+        h3.textContent = county + "（" + names.length + "）";
+        h3.addEventListener("click", function() { section.classList.toggle("open"); });
+        var list = document.createElement("div");
+        list.className = "county-list";
+        names.forEach(function(n) {
+          var s = document.createElement("span");
+          s.textContent = n;
+          list.appendChild(s);
+        });
+        section.appendChild(h3);
+        section.appendChild(list);
+        el.missingList.appendChild(section);
+      });
+      el.missingSection.classList.add("open");
+      showAllAnswerBlocksAsWrong();
+      el.answerInput.blur();
+    }
+
+    function perCountyPcts() {
+      var out = {};
+      for (var county in TAIWAN_TOWNSHIPS) {
+        var list = TAIWAN_TOWNSHIPS[county];
+        var total = list.length;
+        var correct = 0;
+        for (var i = 0; i < list.length; i++)
+          if (guessed.has(list[i] + "\n" + county)) correct++;
+        out[county] = total ? correct / total : 0;
+      }
+      return out;
+    }
+    function pctStr(val) { return val != null ? Math.round(val * 10) / 10 + "%" : "—"; }
+    function renderResultStats(count) {
+      var saved = getSavedStats();
+      var thisPct = TOTAL ? (count / TOTAL) * 100 : 0;
+      var bestPct = TOTAL && saved.highScore ? (saved.highScore / TOTAL) * 100 : null;
+      var avgPct = saved.totalRuns ? saved.overallSumPct / saved.totalRuns : null;
+      el.resultStats.innerHTML =
+        "<p>你答對了 <strong>" + count + "</strong> / " + TOTAL + "</p>" +
+        "<p class=\"result-overall-stats\"><strong>全台 368 鄉鎮市區</strong>　本次答對率 " + pctStr(thisPct) +
+        "　最佳答對率 " + pctStr(bestPct) + "　平均答對率 " + pctStr(avgPct) + "</p>";
+    }
+    function renderCountyStats(thisRunPctByCounty) {
+      var saved = getSavedStats();
+      var html = "<h3>各縣市答對率</h3><table class=\"county-stats-table\"><thead><tr><th>縣市</th><th>本次答對率</th><th>最佳答對率</th><th>平均答對率</th></tr></thead><tbody>";
+      Object.keys(TAIWAN_TOWNSHIPS).forEach(function(county) {
+        var thisPct = (thisRunPctByCounty[county] != null ? thisRunPctByCounty[county] : 0) * 100;
+        var rec = saved.byCounty[county];
+        var bestPct = rec ? rec.best : null;
+        var avgPct = rec && rec.games ? rec.sumPct / rec.games : null;
+        html += "<tr><td>" + county + "</td><td class=\"pct\">" + pctStr(thisPct) + "</td><td class=\"pct best\">" + pctStr(bestPct) + "</td><td class=\"pct\">" + pctStr(avgPct) + "</td></tr>";
+      });
+      html += "</tbody></table>";
+      el.countyStatsSection.innerHTML = html;
+    }
+    function renderTownshipStats() {
+      var saved = getSavedStats();
+      var html = "<h3>各鄉鎮市區答對率</h3><div class=\"township-stats-wrap\"><table class=\"township-stats-table\"><thead><tr><th>縣市</th><th>鄉鎮市區</th><th>答對次數</th><th>測驗次數</th><th>答對率</th></tr></thead><tbody>";
+      Object.keys(TAIWAN_TOWNSHIPS).forEach(function(county) {
+        TAIWAN_TOWNSHIPS[county].forEach(function(name) {
+          var key = county + "\n" + name;
+          var rec = saved.byTownship[key] || { correct: 0, total: 0 };
+          var pct = rec.total ? (rec.correct / rec.total) * 100 : null;
+          html += "<tr><td>" + county + "</td><td>" + name + "</td><td class=\"pct\">" + rec.correct + "</td><td class=\"pct\">" + rec.total + "</td><td class=\"pct\">" + pctStr(pct) + "</td></tr>";
+        });
+      });
+      html += "</tbody></table></div>";
+      el.townshipStatsSection.innerHTML = html;
+    }
+
+    function loadFullTaiwanMap(callback) {
+      var count = 0;
+      var allFeatures = [];
+      var order = Object.keys(COUNTY_CODES);
+
+      function next() {
+        if (count >= order.length) {
+          fetch(COUNTIES_TOPOLOGY_URL)
+            .then(function(r) { return r.json(); })
+            .then(function(countyTopology) {
+              if (typeof callback === "function") callback(null, allFeatures, countyTopology);
+            })
+            .catch(function() {
+              if (typeof callback === "function") callback(null, allFeatures, null);
+            });
+          return;
+        }
+        var county = order[count];
+        var code = COUNTY_CODES[county];
+        count++;
+        fetch(TOPO_BASE + "towns-" + code + ".json")
+          .then(function(r) { return r.json(); })
+          .then(function(topology) {
+            try {
+              var coll = topojson.feature(topology, topology.objects.map);
+              if (coll.features)
+                coll.features.forEach(function(f) {
+                  f.properties = f.properties || {};
+                  f.properties._county = county;
+                  f.properties._name = f.properties.name || "";
+                  allFeatures.push(f);
+                });
+            } catch (e) {}
+            next();
+          })
+          .catch(function() { next(); });
+      }
+      next();
+    }
+
+    function renderFullMap(features, countyTopology) {
+      if (!features || features.length === 0) {
+        el.mapLoading.textContent = "無法載入地圖資料，請檢查網路或稍後再試。";
+        el.mapLoading.classList.add("error");
+        return;
+      }
+      el.mapLoading.classList.add("hidden");
+      var wrapW = el.countyMapWrap.clientWidth || 800;
+      var wrapH = el.countyMapWrap.clientHeight || 420;
+      var width = wrapW;
+      var height = wrapH;
+      var projection = d3.geoMercator().fitSize([width, height], { type: "FeatureCollection", features: features });
+      var pathGen = d3.geoPath().projection(projection);
+      var svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 0 " + width + " " + height);
+      svg.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+      svg.setAttribute("width", "100%");
+      svg.setAttribute("height", "100%");
+      features.forEach(function(f) {
+        var county = f.properties._county || "";
+        var name = f.properties._name || "";
+        var d = pathGen(f);
+        if (!d) return;
+        var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("class", "township");
+        path.setAttribute("d", d);
+        path.setAttribute("data-county", county);
+        path.setAttribute("data-name", name);
+        path.setAttribute("title", name + " (" + county + ")");
+        svg.appendChild(path);
+      });
+      if (countyTopology && countyTopology.objects && countyTopology.objects.map) {
+        try {
+          var mesh = topojson.mesh(countyTopology, countyTopology.objects.map);
+          var borderD = pathGen(mesh);
+          if (borderD) {
+            var borderPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            borderPath.setAttribute("class", "county-border");
+            borderPath.setAttribute("d", borderD);
+            svg.appendChild(borderPath);
+          }
+        } catch (e) {}
+      }
+      el.countyMapInner.appendChild(svg);
+      mapBaseWidth = width;
+      mapBaseHeight = height;
+      setMapZoom(1);
+    }
+
+    var mapZoom = 1;
+    var mapBaseWidth = 0;
+    var mapBaseHeight = 0;
+    function setMapZoom(z) {
+      mapZoom = Math.max(0.5, Math.min(2.5, z));
+      if (el.countyMapInner && mapBaseWidth && mapBaseHeight) {
+        var w = Math.round(mapBaseWidth * mapZoom);
+        var h = Math.round(mapBaseHeight * mapZoom);
+        el.countyMapInner.style.setProperty("width", w + "px", "important");
+        el.countyMapInner.style.setProperty("height", h + "px", "important");
+        el.countyMapInner.style.setProperty("min-width", w + "px", "important");
+        el.countyMapInner.style.setProperty("min-height", h + "px", "important");
+      }
+    }
+    function buildAnswerBlocks() {
+      var container = document.getElementById("answer-blocks-container");
+      if (!container) return;
+      container.innerHTML = "";
+      Object.keys(TAIWAN_TOWNSHIPS).forEach(function(county) {
+        var sec = document.createElement("div");
+        sec.className = "answer-blocks-county";
+        var title = document.createElement("div");
+        title.className = "county-name";
+        title.textContent = county;
+        sec.appendChild(title);
+        var row = document.createElement("div");
+        row.className = "answer-blocks-row";
+        TAIWAN_TOWNSHIPS[county].forEach(function(name) {
+          var block = document.createElement("span");
+          block.className = "answer-block";
+          block.setAttribute("data-county", county);
+          block.setAttribute("data-name", name);
+          block.textContent = "?";
+          row.appendChild(block);
+        });
+        sec.appendChild(row);
+        container.appendChild(sec);
+      });
+    }
+    function updateAnswerBlock(county, name, correct) {
+      var block = document.querySelector(".answer-block[data-county=\"" + county + "\"][data-name=\"" + name + "\"]");
+      if (block) {
+        block.textContent = name;
+        block.classList.toggle("correct", correct);
+        block.classList.toggle("wrong", !correct);
+      }
+    }
+    function showAllAnswerBlocksAsWrong() {
+      getAllEntries().forEach(function(e) {
+        if (!guessed.has(e.name + "\n" + e.county)) updateAnswerBlock(e.county, e.name, false);
+      });
+    }
+
+    function startQuiz() {
+      guessed = new Set();
+      el.guessedTags.innerHTML = "";
+      el.scoreNum.textContent = "0";
+      el.timer.textContent = formatTime(LIMIT_MIN * 60);
+      el.timer.classList.remove("warning");
+      el.answerInput.value = "";
+      el.answerInput.placeholder = "例如：板橋、仁愛區、竹南...";
+      el.startArea.classList.add("hidden");
+      el.quizArea.classList.add("active");
+      el.resultArea.classList.remove("active");
+      el.countyMapInner.innerHTML = "";
+      var loadingDiv = document.createElement("div");
+      loadingDiv.className = "map-loading";
+      loadingDiv.id = "map-loading";
+      loadingDiv.textContent = "載入地圖中…";
+      el.countyMapInner.appendChild(loadingDiv);
+      el.mapLoading = loadingDiv;
+
+      loadFullTaiwanMap(function(err, features, countyTopology) {
+        if (el.countyMapInner.querySelector(".map-loading")) {
+          el.countyMapInner.innerHTML = "";
+          renderFullMap(features, countyTopology);
+          buildAnswerBlocks();
+        }
+        el.answerInput.focus();
+        startTimer();
+      });
+    }
+
+    el.btnStart.addEventListener("click", startQuiz);
+    el.answerInput.addEventListener("keydown", function(e) {
+      if (e.key === "Enter") {
+        handleAnswer(el.answerInput.value);
+        el.answerInput.value = "";
+      }
+    });
+    el.btnPause.addEventListener("click", function() {
+      if (paused) { resumeTimer(); el.btnPause.textContent = "暫停"; }
+      else { pauseTimer(); el.btnPause.textContent = "繼續"; }
+    });
+    el.btnGiveup.addEventListener("click", endQuiz);
+    el.btnRetake.addEventListener("click", startQuiz);
+    document.getElementById("btn-zoom-in").addEventListener("click", function() { setMapZoom(mapZoom + 0.25); });
+    document.getElementById("btn-zoom-out").addEventListener("click", function() { setMapZoom(mapZoom - 0.25); });
+    updateHighScoreDisplay();
+  </script>
+</body>
+</html>
