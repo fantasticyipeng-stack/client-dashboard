@@ -1,0 +1,15 @@
+# Google Drive API
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.1.1
+google-auth-oauthlib>=1.1.0
+
+# SSL 憑證（解決 Mac 上 Whisper 下載模型時的憑證錯誤）
+certifi>=2024.2.0
+
+# 語音轉文字（openai-whisper 必裝；faster-whisper 選裝，見下方）
+openai-whisper>=20231117
+# 選裝：若安裝成功會自動用 faster-whisper（約 2–4x 較快）。若 pip 報錯可略過。
+# pip install faster-whisper
+
+# 網頁介面
+flask>=3.0.0

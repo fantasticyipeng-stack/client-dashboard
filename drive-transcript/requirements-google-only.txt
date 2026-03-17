@@ -1,0 +1,4 @@
+# 僅 Google Drive API（若完整 requirements.txt 安裝失敗可先裝這個）
+google-api-python-client>=2.100.0
+google-auth-httplib2>=0.1.1
+google-auth-oauthlib>=1.1.0

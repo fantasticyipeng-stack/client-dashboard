@@ -1,0 +1,12 @@
+{
+  "drive_folder_id": "你的雲端硬碟資料夾 ID（選填，不填則列出「我的雲端硬碟」）",
+  "video_mime_types": [
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+    "video/x-msvideo",
+    "video/x-ms-wmv"
+  ],
+  "output_dir": "transcripts",
+  "language": "zh"
+}

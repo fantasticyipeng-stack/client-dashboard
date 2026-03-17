@@ -1,0 +1,3 @@
+# 選用：安裝後轉錄會用 faster-whisper（約 2–4x 較快）
+# 若 pip install 報錯（例如 puccinialin / tokenizers 建置失敗），可略過，程式會用 openai-whisper
+faster-whisper>=1.0.0

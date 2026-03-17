@@ -1,0 +1,7 @@
+venv/
+credentials.json
+token.json
+config.json
+transcripts/
+*.pyc
+__pycache__/
