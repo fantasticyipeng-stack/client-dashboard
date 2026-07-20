@@ -37,3 +37,17 @@ services:
         value: "0"
       - key: SITE_PASSWORD
         sync: false
+      - key: SMTP_HOST
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        value: "fantasticyipeng@gmail.com"
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        value: "fantasticyipeng@gmail.com"
+      - key: CHECKLIST_EMAIL_TO
+        value: "fantasticyipeng@gmail.com"
+      - key: DASHBOARD_PUBLIC_URL
+        value: "https://video-dashboard-bsj9.onrender.com"

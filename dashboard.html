@@ -217,6 +217,21 @@ textarea { resize: vertical; min-height: 50px; }
 
 .page-title { font-size: 18px; font-weight: 700; padding: 20px 32px 8px; }
 
+.checklist-wrap { padding: 0 32px 32px; }
+.checklist-progress-card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px 20px; margin-bottom: 16px; }
+.checklist-progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 14px; }
+.checklist-progress-header strong { font-size: 18px; color: var(--primary); }
+.checklist-progress-bar { height: 12px; background: #e2e8f0; border-radius: 6px; overflow: hidden; }
+.checklist-progress-fill { height: 100%; background: linear-gradient(90deg, var(--primary), #7c3aed); border-radius: 6px; transition: width .3s ease; }
+.checklist-section { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px 20px; margin-bottom: 14px; }
+.checklist-section h3 { font-size: 15px; font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.checklist-item { display: flex; align-items: flex-start; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; cursor: pointer; }
+.checklist-item:last-child { border-bottom: none; }
+.checklist-item input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--success); cursor: pointer; flex-shrink: 0; }
+.checklist-item label { flex: 1; font-size: 14px; cursor: pointer; line-height: 1.5; }
+.checklist-item.done label { color: var(--text2); text-decoration: line-through; }
+.checklist-item .weekly-badge { font-size: 11px; color: var(--warning); background: #fef3c7; padding: 1px 6px; border-radius: 4px; margin-left: 6px; }
+
 /* Didi section blocks */
 .didi-section { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); margin: 16px 32px; padding: 20px 24px; }
 .didi-section h3 { font-size: 16px; font-weight: 700; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
@@ -392,6 +407,7 @@ textarea { resize: vertical; min-height: 50px; }
     <li><a onclick="switchPage('clients',this)"><span class="nav-icon">&#9733;</span><span>客戶資料與目標</span></a></li>
     <li><a onclick="switchPage('didi',this)"><span class="nav-icon">&#9830;</span><span>底迪帳號</span></a></li>
     <li><a onclick="switchPage('editors',this)"><span class="nav-icon">&#9998;</span><span>剪輯人員管理</span></a></li>
+    <li><a onclick="switchPage('checklist',this)"><span class="nav-icon">&#9745;</span><span>每日清單</span></a></li>
   </ul>
 </aside>
 
@@ -465,12 +481,28 @@ textarea { resize: vertical; min-height: 50px; }
   <div class="profile-grid" id="editorProfileGrid"></div>
 </div>
 
+<!-- PAGE 5: Daily Checklist -->
+<div id="page-checklist" class="page">
+  <div class="page-title">每日清單</div>
+  <div class="checklist-wrap">
+    <div class="checklist-progress-card">
+      <div class="checklist-progress-header">
+        <span><strong id="checklistProgressText">0 / 0 完成</strong></span>
+        <span id="checklistDate" style="color:var(--text2);font-size:13px"></span>
+      </div>
+      <div class="checklist-progress-bar"><div class="checklist-progress-fill" id="checklistProgressFill" style="width:0%"></div></div>
+    </div>
+    <div id="checklistSections"></div>
+  </div>
+</div>
+
 <!-- Bottom Nav (mobile) -->
 <nav class="bottom-nav" id="bottomNav">
   <a class="active" data-page="videos" onclick="switchPage('videos',null,this)"><span class="bnav-icon">&#9776;</span>影片</a>
   <a data-page="clients" onclick="switchPage('clients',null,this)"><span class="bnav-icon">&#9733;</span>客戶</a>
   <a data-page="didi" onclick="switchPage('didi',null,this)"><span class="bnav-icon">&#9830;</span>底迪</a>
   <a data-page="editors" onclick="switchPage('editors',null,this)"><span class="bnav-icon">&#9998;</span>人員</a>
+  <a data-page="checklist" onclick="switchPage('checklist',null,this)"><span class="bnav-icon">&#9745;</span>清單</a>
 </nav>
 
 <!-- Form Modal -->
@@ -780,13 +812,14 @@ function switchPage(id, el, bnav) {
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('.sidebar-nav a').forEach(a => a.classList.remove('active'));
   if (el) el.classList.add('active');
-  else document.querySelectorAll('.sidebar-nav a').forEach(a => { if (a.textContent.includes(id==='videos'?'影片管理':id==='clients'?'客戶':id==='didi'?'底迪':'剪輯')) a.classList.add('active'); });
+  else document.querySelectorAll('.sidebar-nav a').forEach(a => { if (a.textContent.includes(id==='videos'?'影片管理':id==='clients'?'客戶':id==='didi'?'底迪':id==='checklist'?'清單':'剪輯')) a.classList.add('active'); });
   document.querySelectorAll('.bottom-nav a').forEach(a => a.classList.remove('active'));
   if (bnav) bnav.classList.add('active');
   else { const bn = document.querySelector(`.bottom-nav a[data-page="${id}"]`); if (bn) bn.classList.add('active'); }
   if (id === 'clients') { const cs=document.getElementById('clientStatusFilter'); if(cs)cs.value=clientStatusFilter; renderClientProfiles(); }
   if (id === 'editors') { const es=document.getElementById('editorStatusFilter'); if(es)es.value=editorStatusFilter; renderEditorProfiles(); }
   if (id === 'didi') renderDidiPage();
+  if (id === 'checklist') loadChecklist();
   window.scrollTo(0, 0);
 }
 
@@ -1891,6 +1924,70 @@ function renderDidiSoftware(){
     <div class="didi-software-table-cards didi-cards">${cards||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
     <div class="didi-software-compact" style="display:none">${compactRows||'<p style="text-align:center;color:var(--text2);padding:12px">尚無記錄</p>'}</div>
     <div class="didi-subtotal">軟體收入小計：$${fmtMoney(grandTotal)}</div>`;
+}
+
+// ── Daily Checklist ──
+const CHECKLIST_CATEGORIES = {
+  work: { label: '工作', icon: '📋' },
+  health: { label: '健康', icon: '💪' },
+  relationships: { label: '人際關係', icon: '❤️' },
+};
+let checklistData = null;
+
+async function loadChecklist() {
+  if (typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE) {
+    document.getElementById('checklistSections').innerHTML = '<p style="color:var(--text2);padding:20px">Demo 模式無法載入每日清單。</p>';
+    return;
+  }
+  try {
+    const data = await apiCall('/api/checklist/today');
+    checklistData = data;
+    renderChecklist(data);
+  } catch (e) {
+    document.getElementById('checklistSections').innerHTML = '<p style="color:var(--danger);padding:20px">載入失敗：' + esc(e.message) + '</p>';
+  }
+}
+
+function renderChecklist(data) {
+  document.getElementById('checklistProgressText').textContent = data.completed + ' / ' + data.total + ' 完成';
+  document.getElementById('checklistDate').textContent = data.date || '';
+  document.getElementById('checklistProgressFill').style.width = (data.progress_pct || 0) + '%';
+
+  const grouped = {};
+  (data.items || []).forEach(item => {
+    if (!grouped[item.category]) grouped[item.category] = [];
+    grouped[item.category].push(item);
+  });
+
+  const order = ['work', 'health', 'relationships'];
+  let html = '';
+  order.forEach(cat => {
+    const items = grouped[cat];
+    if (!items || !items.length) return;
+    const meta = CHECKLIST_CATEGORIES[cat] || { label: cat, icon: '' };
+    html += '<div class="checklist-section"><h3>' + meta.icon + ' ' + meta.label + '</h3>';
+    items.forEach(item => {
+      const done = item.completed ? ' done' : '';
+      const checked = item.completed ? ' checked' : '';
+      const weekly = item.frequency === 'weekly' ? '<span class="weekly-badge">每週</span>' : '';
+      html += '<div class="checklist-item' + done + '" onclick="toggleChecklistItem(' + item.id + ')">' +
+        '<input type="checkbox"' + checked + ' onclick="event.stopPropagation();toggleChecklistItem(' + item.id + ')">' +
+        '<label>' + esc(item.title) + weekly + '</label></div>';
+    });
+    html += '</div>';
+  });
+  document.getElementById('checklistSections').innerHTML = html || '<p style="color:var(--text2);padding:20px">尚無清單項目。</p>';
+}
+
+async function toggleChecklistItem(itemId) {
+  if (typeof VIEWER_MODE !== 'undefined' && VIEWER_MODE) return;
+  try {
+    const data = await apiCall('/api/checklist/toggle', { method: 'POST', body: { item_id: itemId } });
+    checklistData = data;
+    renderChecklist(data);
+  } catch (e) {
+    toast('勾選失敗：' + e.message, true);
+  }
 }
 
 // ── Init ──
