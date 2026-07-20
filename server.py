@@ -9,7 +9,7 @@ import threading
 from datetime import datetime, date, timezone, timedelta
 
 import requests as http_requests
-from sqlalchemy import text, Integer
+from sqlalchemy import text, Integer, UniqueConstraint
 from sqlalchemy.types import TypeDecorator
 from flask import Flask, request, jsonify, send_file, abort, redirect, session, url_for, render_template_string, Response
 from flask_cors import CORS
@@ -17,6 +17,8 @@ from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from apscheduler.schedulers.background import BackgroundScheduler
 from urllib.parse import urlencode
+
+from checklist_email import build_morning_email, build_evening_email, send_checklist_email
 
 load_dotenv()
 
@@ -37,6 +39,8 @@ AUTH_ENABLED = bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET and SESSION_SECRET
 # 網站密碼保護（先輸入此密碼才能進入登入/首頁）
 SITE_PASSWORD = os.getenv("SITE_PASSWORD", "90010198").strip()
 SITE_LOCK_ENABLED = bool(SITE_PASSWORD)
+
+DASHBOARD_PUBLIC_URL = os.getenv("DASHBOARD_PUBLIC_URL", "https://video-dashboard-bsj9.onrender.com")
 
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dashboard.db")
 DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite:///{DB_PATH}")
@@ -95,6 +99,8 @@ def _site_unlock_required():
     path = request.path
     if path in ("/health", "/unlock", "/viewer", "/logo.png"):
         return None
+    if path in ("/api/daily-update", "/api/checklist/morning", "/api/checklist/evening"):
+        return None
     return redirect(url_for("unlock_page"))
 
 
@@ -113,6 +119,8 @@ def require_login():
     if path == "/webhook":
         return None
     if path == "/api/line-test" or path == "/api/daily-update":
+        return None
+    if path.startswith("/api/checklist/morning") or path.startswith("/api/checklist/evening"):
         return None
     if path == "/" or path.startswith("/api/"):
         return _login_required()
@@ -300,6 +308,119 @@ class DidiSoftware(db.Model):
 
     def to_dict(self):
         return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
+
+class ChecklistItem(db.Model):
+    __tablename__ = "checklist_items"
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(20), nullable=False)
+    title = db.Column(db.String(200), nullable=False)
+    sort_order = db.Column(db.Integer, default=0)
+    frequency = db.Column(db.String(10), default="daily")
+    active = db.Column(BoolAsInteger, default=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "category": self.category,
+            "title": self.title,
+            "sort_order": self.sort_order,
+            "frequency": self.frequency,
+            "active": self.active,
+        }
+
+
+class ChecklistCompletion(db.Model):
+    __tablename__ = "checklist_completions"
+    __table_args__ = (UniqueConstraint("item_id", "date", name="uq_checklist_completion"),)
+    id = db.Column(db.Integer, primary_key=True)
+    item_id = db.Column(db.Integer, db.ForeignKey("checklist_items.id"), nullable=False)
+    date = db.Column(db.String(10), nullable=False)
+    completed_at = db.Column(db.DateTime, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "item_id": self.item_id,
+            "date": self.date,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+        }
+
+
+DEFAULT_CHECKLIST_ITEMS = [
+    ("work", "確認今日最重要的 3 件事", 1, "daily"),
+    ("work", "檢查 dashboard 逾期任務", 2, "daily"),
+    ("work", "回覆重要訊息／Email", 3, "daily"),
+    ("work", "專注深度工作至少 1 小時", 4, "daily"),
+    ("work", "整理明日優先順序", 5, "daily"),
+    ("health", "喝足 2000ml 水", 1, "daily"),
+    ("health", "運動或散步 30 分鐘", 2, "daily"),
+    ("health", "三餐定時、少加工食品", 3, "daily"),
+    ("health", "睡眠前 1 小時不看螢幕", 4, "daily"),
+    ("health", "昨晚睡眠 7 小時以上", 5, "daily"),
+    ("relationships", "主動聯絡一位重要的人", 1, "daily"),
+    ("relationships", "對身邊的人表達感謝", 2, "daily"),
+    ("relationships", "專心陪伴家人／伴侶 30 分鐘（無手機）", 3, "daily"),
+    ("relationships", "回覆未讀訊息", 4, "daily"),
+    ("relationships", "本週有一次深度對話", 5, "weekly"),
+]
+
+
+def _today_str():
+    return datetime.now(TZ_TW).strftime("%Y-%m-%d")
+
+
+def get_active_checklist_items():
+    return (
+        ChecklistItem.query.filter_by(active=True)
+        .order_by(ChecklistItem.category, ChecklistItem.sort_order)
+        .all()
+    )
+
+
+def get_completed_item_ids_for_date(date_str):
+    rows = ChecklistCompletion.query.filter_by(date=date_str).all()
+    return {row.item_id for row in rows}
+
+
+def build_checklist_today_payload():
+    date_str = _today_str()
+    items = get_active_checklist_items()
+    completed_ids = get_completed_item_ids_for_date(date_str)
+    item_dicts = []
+    for item in items:
+        d = item.to_dict()
+        d["completed"] = item.id in completed_ids
+        item_dicts.append(d)
+    total = len(item_dicts)
+    done = sum(1 for i in item_dicts if i["completed"])
+    return {
+        "date": date_str,
+        "items": item_dicts,
+        "total": total,
+        "completed": done,
+        "progress_pct": round(done / total * 100) if total else 0,
+    }
+
+
+def seed_checklist_defaults():
+    """Seed default checklist items when table is empty."""
+    try:
+        if ChecklistItem.query.count() > 0:
+            return
+        for category, title, sort_order, frequency in DEFAULT_CHECKLIST_ITEMS:
+            db.session.add(ChecklistItem(
+                category=category,
+                title=title,
+                sort_order=sort_order,
+                frequency=frequency,
+                active=True,
+            ))
+        db.session.commit()
+        print("[seed_checklist_defaults] Seeded 15 default checklist items.")
+    except Exception as e:
+        db.session.rollback()
+        print(f"[seed_checklist_defaults] {e}")
 
 
 def seed_defaults():
@@ -1312,6 +1433,97 @@ def api_daily_update():
     return jsonify({"success": ok, "message": msg})
 
 
+# ── Daily Checklist ──
+
+@app.route("/api/checklist/today", methods=["GET"])
+def api_checklist_today():
+    return jsonify(build_checklist_today_payload())
+
+
+@app.route("/api/checklist/toggle", methods=["POST"])
+def api_checklist_toggle():
+    data = request.get_json(silent=True) or {}
+    item_id = data.get("item_id")
+    if not item_id:
+        return jsonify({"error": "缺少 item_id"}), 400
+
+    item = ChecklistItem.query.get(item_id)
+    if not item or not item.active:
+        return jsonify({"error": "找不到此項目"}), 404
+
+    date_str = _today_str()
+    existing = ChecklistCompletion.query.filter_by(item_id=item_id, date=date_str).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        completed = False
+    else:
+        db.session.add(ChecklistCompletion(
+            item_id=item_id,
+            date=date_str,
+            completed_at=datetime.now(TZ_TW),
+        ))
+        db.session.commit()
+        completed = True
+
+    payload = build_checklist_today_payload()
+    return jsonify({
+        "item_id": item_id,
+        "completed": completed,
+        "date": date_str,
+        **payload,
+    })
+
+
+def _send_morning_checklist_email():
+    items = [item.to_dict() for item in get_active_checklist_items()]
+    subject, body = build_morning_email(items, DASHBOARD_PUBLIC_URL)
+    return send_checklist_email(subject, body)
+
+
+def _send_evening_checklist_email():
+    items = [item.to_dict() for item in get_active_checklist_items()]
+    completed_ids = get_completed_item_ids_for_date(_today_str())
+    subject, body = build_evening_email(items, completed_ids, DASHBOARD_PUBLIC_URL)
+    return send_checklist_email(subject, body)
+
+
+def scheduled_morning_checklist():
+    with app.app_context():
+        try:
+            db.session.rollback()
+            ok = _send_morning_checklist_email()
+            print(f"[Scheduler] Morning checklist email sent, success={ok}")
+        except Exception as e:
+            db.session.rollback()
+            print(f"[Scheduler] Morning checklist error: {e}")
+
+
+def scheduled_evening_checklist():
+    with app.app_context():
+        try:
+            db.session.rollback()
+            ok = _send_evening_checklist_email()
+            print(f"[Scheduler] Evening checklist email sent, success={ok}")
+        except Exception as e:
+            db.session.rollback()
+            print(f"[Scheduler] Evening checklist error: {e}")
+
+
+@app.route("/api/checklist/morning", methods=["GET"])
+def api_checklist_morning():
+    """手動或由外部 cron 觸發早晨 checklist Email。"""
+    ok = _send_morning_checklist_email()
+    return jsonify({"success": ok, "message": "早晨清單已寄出" if ok else "Email 未設定或寄送失敗"})
+
+
+@app.route("/api/checklist/evening", methods=["GET"])
+def api_checklist_evening():
+    """手動或由外部 cron 觸發晚上 checklist Email。"""
+    ok = _send_evening_checklist_email()
+    return jsonify({"success": ok, "message": "晚上回顧已寄出" if ok else "Email 未設定或寄送失敗"})
+
+
 # ── Startup ──
 
 def migrate_db():
@@ -1387,6 +1599,9 @@ _scheduler.add_job(scheduled_overdue_check, "cron", hour=_check_hour, minute=_ch
 _scheduler.add_job(scheduled_daily_update, "cron", hour="8,12,20", minute=0)
 # 每天 16:00 傳送「今天要上傳的影片」
 _scheduler.add_job(scheduled_today_upload, "cron", hour=16, minute=0)
+# 每日 checklist Email：08:00 早晨清單、20:00 晚上回顧
+_scheduler.add_job(scheduled_morning_checklist, "cron", hour=8, minute=0)
+_scheduler.add_job(scheduled_evening_checklist, "cron", hour=20, minute=0)
 
 
 def _run_startup():
@@ -1396,12 +1611,13 @@ def _run_startup():
             db.create_all()
             migrate_db()
             seed_defaults()
+            seed_checklist_defaults()
             print("[Startup] Database initialized successfully.")
         except Exception as e:
             print(f"[Startup ERROR] {e}")
     try:
         _scheduler.start()
-        print("[Scheduler] Overdue check at {:02d}:{:02d}, daily LINE at 08:00, 12:00, 20:00, today's upload at 16:00".format(_check_hour, _check_minute))
+        print("[Scheduler] Overdue check at {:02d}:{:02d}, daily LINE at 08:00, 12:00, 20:00, today's upload at 16:00, checklist email at 08:00 and 20:00".format(_check_hour, _check_minute))
     except Exception as e:
         print(f"[Scheduler start ERROR] {e}")
 
